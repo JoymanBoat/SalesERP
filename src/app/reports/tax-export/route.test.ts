@@ -1,0 +1,114 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+const { findOrders, findRefunds, getWorkspace } = vi.hoisted(() => ({
+  findOrders: vi.fn(),
+  findRefunds: vi.fn(),
+  getWorkspace: vi.fn(),
+}));
+
+vi.mock("@/lib/prisma", () => ({
+  prisma: {
+    order: { findMany: findOrders },
+    refund: { findMany: findRefunds },
+  },
+}));
+
+vi.mock("@/lib/workspace", () => ({ getWorkspace }));
+
+import { MembershipRole, OrderStatus, PaymentStatus, Prisma } from "@prisma/client";
+import { GET } from "./route";
+
+describe("GET /reports/tax-export", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-11-05T12:00:00.000Z"));
+    getWorkspace.mockResolvedValue({
+      organization: { id: "org-1", currency: "GHS" },
+      store: { id: "store-1" },
+      membership: { role: MembershipRole.ACCOUNTANT },
+    });
+    findOrders.mockResolvedValue([]);
+    findRefunds.mockResolvedValue([]);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("exports saved tax snapshots and refund notes for the selected store and period", async () => {
+    const paidAt = new Date("2026-11-03T10:00:00.000Z");
+    const refundedAt = new Date("2026-11-04T10:00:00.000Z");
+    findOrders.mockResolvedValue([{
+      number: 42,
+      taxRate: new Prisma.Decimal("15.00"),
+      subtotal: new Prisma.Decimal("100.00"),
+      discountTotal: new Prisma.Decimal("10.00"),
+      taxTotal: new Prisma.Decimal("13.50"),
+      total: new Prisma.Decimal("103.50"),
+      taxComponentsRecorded: true,
+      vatRate: new Prisma.Decimal("10.00"),
+      vatTotal: new Prisma.Decimal("9.00"),
+      nhilRate: new Prisma.Decimal("2.50"),
+      nhilTotal: new Prisma.Decimal("2.25"),
+      getfundRate: new Prisma.Decimal("2.50"),
+      getfundTotal: new Prisma.Decimal("2.25"),
+      items: [{ taxTreatment: "STANDARD" }, { taxTreatment: "ZERO_RATED" }],
+      payments: [{ createdAt: paidAt }],
+    }]);
+    findRefunds.mockResolvedValue([{
+      createdAt: refundedAt,
+      amount: new Prisma.Decimal("20.00"),
+      order: { number: 42 },
+    }]);
+
+    const response = await GET(new Request("http://localhost/reports/tax-export?days=7"));
+    const csv = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("Cache-Control")).toBe("private, no-store");
+    expect(response.headers.get("Content-Type")).toBe("text/csv; charset=utf-8");
+    expect(response.headers.get("Content-Disposition")).toContain("tax-snapshots-7-days.csv");
+    expect(csv).toContain('"2026-11-03T10:00:00.000Z","SALE","42","15.00","90.00","13.50","103.50"');
+    expect(csv).toContain('"2026-11-04T10:00:00.000Z","REFUND","42","","","","","-20.00"');
+    expect(csv).toContain('"10.00","9.00","2.50","2.25","2.50","2.25","RECORDED","STANDARD:1;ZERO_RATED:1"');
+    expect(csv).toContain("Refund tax allocation is not stored; review against source receipt");
+
+    const expectedSince = new Date("2026-10-29T12:00:00.000Z");
+    expect(findOrders).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        organizationId: "org-1",
+        storeId: "store-1",
+        status: { in: [OrderStatus.PAID, OrderStatus.PARTIALLY_REFUNDED, OrderStatus.REFUNDED] },
+        payments: {
+          some: {
+            createdAt: { gte: expectedSince, lte: new Date("2026-11-05T12:00:00.000Z") },
+            status: { in: [PaymentStatus.SUCCEEDED, PaymentStatus.PARTIALLY_REFUNDED, PaymentStatus.REFUNDED] },
+          },
+        },
+      }),
+    }));
+    expect(findRefunds).toHaveBeenCalledWith(expect.objectContaining({
+      where: {
+        organizationId: "org-1",
+        storeId: "store-1",
+        createdAt: { gte: expectedSince, lte: new Date("2026-11-05T12:00:00.000Z") },
+      },
+    }));
+  });
+
+  it("denies roles without invoice-report access before querying sales", async () => {
+    getWorkspace.mockResolvedValue({
+      organization: { id: "org-1", currency: "GHS" },
+      store: { id: "store-1" },
+      membership: { role: MembershipRole.CASHIER },
+    });
+
+    const response = await GET(new Request("http://localhost/reports/tax-export"));
+
+    expect(response.status).toBe(403);
+    expect(response.headers.get("Cache-Control")).toBe("private, no-store");
+    expect(findOrders).not.toHaveBeenCalled();
+    expect(findRefunds).not.toHaveBeenCalled();
+  });
+});

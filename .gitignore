@@ -1,0 +1,14 @@
+.next/
+node_modules/
+out/
+coverage/
+.env
+.env.*
+!.env.example
+*.tsbuildinfo
+next-env.d.ts
+backups/
+
+# Playwright
+/test-results/
+/playwright-report/
