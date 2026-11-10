@@ -1,6 +1,7 @@
 "use server";
 
 import { InventoryMovementType, Prisma } from "@prisma/client";
+import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
@@ -8,6 +9,7 @@ import { canManageCatalog } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 import { getWorkspace } from "@/lib/workspace";
 import { CatalogCsvError, parseProductImportCsv } from "@/lib/catalog";
+import { buildVariantCombinations, variantBatchOptionsSchema, variantOptionKey } from "@/lib/variant-batch";
 import {
   productInputSchema,
   productOptionSchema,
@@ -22,6 +24,10 @@ export type ProductActionState = {
   status: "idle" | "error" | "success";
   message: string;
 };
+
+function generatedSku() {
+  return `VAR-${randomUUID().replaceAll("-", "").toUpperCase()}`;
+}
 
 function parseOptionValues(value: FormDataEntryValue | null): unknown {
   if (typeof value !== "string" || !value) return [];
@@ -64,7 +70,7 @@ export async function createProduct(
 ): Promise<ProductActionState> {
   const parsed = productInputSchema.safeParse({
     name: formData.get("name"),
-    sku: formData.get("sku"),
+    sku: formData.get("sku") || generatedSku(),
     barcode: formData.get("barcode") || undefined,
     category: formData.get("category") || undefined,
     unitPrice: formData.get("unitPrice"),
@@ -288,6 +294,96 @@ export async function importProducts(
   }
 }
 
+export async function createProductVariantBatch(
+  _previousState: ProductActionState,
+  formData: FormData,
+): Promise<ProductActionState> {
+  const options = variantBatchOptionsSchema.safeParse(parseOptionValues(formData.get("options")));
+  const input = productVariantInputSchema.safeParse({
+    productId: formData.get("productId"),
+    name: "Batch",
+    sku: "BATCH",
+    unitPrice: formData.get("unitPrice"),
+    costPrice: formData.get("costPrice") || "",
+    initialStock: "0",
+    reorderPoint: formData.get("reorderPoint"),
+  });
+  if (!options.success || !input.success) {
+    return { status: "error", message: options.error?.issues[0]?.message ?? input.error?.issues[0]?.message ?? "Check the variant details." };
+  }
+  const combinations = buildVariantCombinations(options.data);
+  if (combinations.some((values) => values.map(({ value }) => value).join(" / ").length > 80)) {
+    return { status: "error", message: "Each combined variant name must be at most 80 characters." };
+  }
+  const { organization, membership, store } = await getWorkspace({ feature: "inventory", operation: "change" });
+  if (!canManageCatalog(membership.role)) {
+    return { status: "error", message: "Your role cannot add product variants." };
+  }
+
+  try {
+    await prisma.$transaction(async (transaction) => {
+      await transaction.$queryRaw`
+        SELECT "id" FROM "Product"
+        WHERE "id" = ${input.data.productId} AND "organizationId" = ${organization.id}
+        FOR UPDATE
+      `;
+      const product = await transaction.product.findFirst({
+        where: { id: input.data.productId, organizationId: organization.id, archivedAt: null },
+        select: { id: true },
+      });
+      if (!product) throw new Error("PRODUCT_NOT_AVAILABLE");
+      await validateProductOptionValues(transaction, organization.id, options.data.map(({ optionId }) => ({ optionId, value: "x" })));
+      const existing = await transaction.productVariant.findMany({
+        where: { organizationId: organization.id, productId: product.id },
+        select: { optionValues: { select: { optionId: true, value: true } } },
+      });
+      const existingKeys = new Set(existing.map(({ optionValues }) => variantOptionKey(optionValues)));
+      if (combinations.some((values) => existingKeys.has(variantOptionKey(values)))) {
+        throw new Error("VARIANT_COMBINATION_EXISTS");
+      }
+
+      for (const optionValues of combinations) {
+        const name = optionValues.map(({ value }) => value).join(" / ");
+        const sku = generatedSku();
+        const variant = await transaction.productVariant.create({
+          data: {
+            organizationId: organization.id, productId: product.id, name, sku,
+            unitPrice: new Prisma.Decimal(input.data.unitPrice),
+            costPrice: input.data.costPrice ? new Prisma.Decimal(input.data.costPrice) : null,
+          },
+        });
+        await transaction.productVariantOption.createMany({
+          data: optionValues.map(({ optionId, value }) => ({ organizationId: organization.id, variantId: variant.id, optionId, value })),
+        });
+        await transaction.inventoryLevel.create({
+          data: { organizationId: organization.id, storeId: store.id, variantId: variant.id, quantity: 0, reorderPoint: input.data.reorderPoint },
+        });
+        await transaction.auditLog.create({
+          data: {
+            organizationId: organization.id, actorId: membership.userId, action: "product.variant_created",
+            entityType: "ProductVariant", entityId: variant.id,
+            details: { productId: product.id, name, sku, storeId: store.id, options: optionValues },
+          },
+        });
+      }
+    }, { maxWait: 10_000, timeout: 30_000 });
+    for (const path of ["/products", "/inventory", "/purchasing", "/dashboard"]) revalidatePath(path);
+    return { status: "success", message: `${combinations.length} variants created with generated SKUs and zero opening stock.` };
+  } catch (error) {
+    if (error instanceof Error && error.message === "PRODUCT_NOT_AVAILABLE") {
+      return { status: "error", message: "That product is no longer available. Refresh and try again." };
+    }
+    if (error instanceof Error && error.message === "PRODUCT_OPTIONS_UNAVAILABLE") {
+      return { status: "error", message: "One or more product options are no longer available. Refresh and try again." };
+    }
+    if (error instanceof Error && error.message === "VARIANT_COMBINATION_EXISTS") {
+      return { status: "error", message: "A variant with one of these option combinations already exists. No variants were created." };
+    }
+    console.error("Product variant batch creation failed.", error);
+    return { status: "error", message: "The variant batch could not be saved. No variants were created." };
+  }
+}
+
 export async function createProductVariant(
   _previousState: ProductActionState,
   formData: FormData,
@@ -295,7 +391,7 @@ export async function createProductVariant(
   const parsed = productVariantInputSchema.safeParse({
     productId: formData.get("productId"),
     name: formData.get("name"),
-    sku: formData.get("sku"),
+    sku: formData.get("sku") || generatedSku(),
     barcode: formData.get("barcode") || undefined,
     unitPrice: formData.get("unitPrice"),
     costPrice: formData.get("costPrice") || "",

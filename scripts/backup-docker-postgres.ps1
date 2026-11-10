@@ -16,6 +16,7 @@ if (Test-Path -LiteralPath $backupPath) {
 
 Push-Location $projectRoot
 try {
+  . (Join-Path $PSScriptRoot "assert-docker-postgres-target.ps1")
   $dumpCommand = "docker compose exec -T db pg_dump --username=saleserp_app --dbname=saleserp --format=custom > $relativePath"
   & $env:ComSpec /d /s /c "`"$dumpCommand`""
   if ($LASTEXITCODE -ne 0) {

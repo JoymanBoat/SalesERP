@@ -54,8 +54,21 @@ test("owner orders from a supplier, receives stock, cancels an order, then sees 
   await order.getByRole("button", { name: "Receive entered quantities" }).click();
   await expect(order).toContainText("20/20 received");
 
+  const invoiceNumber = `INV-${unique}`.slice(0, 80).toUpperCase();
+  await order.getByText("Record supplier invoice", { exact: true }).click();
+  await order.getByLabel("Invoice number").fill(invoiceNumber);
+  await order.getByLabel(/^Invoice amount/).fill("160");
+  await order.getByRole("button", { name: "Record invoice" }).click();
+  await expect(order).toContainText(invoiceNumber);
+
+  const supplierReturn = order.locator(".purchase-return-form");
+  await supplierReturn.getByLabel(/Return E2E Cola/).fill("1");
+  await supplierReturn.getByLabel("Reason").fill("E2E damaged supplier stock");
+  await supplierReturn.getByRole("button", { name: "Return to supplier" }).click();
+  await expect(order).toContainText("E2E damaged supplier stock");
+
   await page.goto("/inventory?q=E2E%20Cola");
-  await expect(page.getByRole("row", { name: /E2E Cola/ }).first()).toContainText("25");
+  await expect(page.getByRole("row", { name: /E2E Cola/ }).first()).toContainText("24");
 
   await page.goto("/purchasing");
   await page.getByRole("combobox", { name: "Supplier", exact: true }).selectOption({ label: "E2E Wholesale Ltd" });

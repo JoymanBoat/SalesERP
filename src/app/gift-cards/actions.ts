@@ -28,7 +28,7 @@ export async function issueGiftCard(
   const { organization, membership } = await getWorkspace({ feature: "giftCards", operation: "change" });
   if (!canManagePricing(membership.role)) return { status: "error", message: "Only an owner or manager can issue gift cards." };
   const businessDate = businessDateInTimeZone(new Date(), organization.timezone);
-  if (!giftCardExpiryIsValid(parsed.data.expiresOn, businessDate)) {
+  if (!giftCardExpiryIsValid(parsed.data.expiresOn || null, businessDate)) {
     return { status: "error", message: "Expiry date cannot be before the organization's business date." };
   }
 

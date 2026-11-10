@@ -32,6 +32,7 @@ $verifyCommand = "docker compose exec -T db pg_restore --list < `"$safeRelativeP
 
 Push-Location $projectRoot
 try {
+  . (Join-Path $PSScriptRoot "assert-docker-postgres-target.ps1")
   & $env:ComSpec /d /s /c $verifyCommand
   if ($LASTEXITCODE -ne 0) {
     throw "The backup archive could not be validated. No database changes were made."

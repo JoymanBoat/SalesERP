@@ -29,7 +29,7 @@ vi.mock("@/lib/workspace", () => ({ getWorkspace }));
 vi.mock("next/cache", () => ({ revalidatePath }));
 
 import { MembershipRole, Prisma } from "@prisma/client";
-import { createProduct, createProductVariant, importProducts, updateProduct } from "./actions";
+import { createProduct, createProductVariant, createProductVariantBatch, importProducts, updateProduct } from "./actions";
 
 const csv = [
   "Product name,SKU,Unit price,Opening stock,Reorder point,Category,Cost price",
@@ -232,6 +232,16 @@ describe("createProduct", () => {
     }));
   });
 
+  it("generates a SKU when one is not supplied", async () => {
+    const formData = new FormData();
+    formData.set("name", "Tea");
+    formData.set("unitPrice", "12.50");
+    formData.set("initialStock", "0");
+    formData.set("reorderPoint", "3");
+    expect((await createProduct({ status: "idle", message: "" }, formData)).status).toBe("success");
+    expect(productCreate.mock.calls[0][0].data.variants.create.sku).toMatch(/^VAR-[A-F0-9]{32}$/);
+  });
+
   it("atomically creates a product, variant, opening stock, movement, and audit event", async () => {
     const formData = new FormData();
     formData.set("name", "Tea");
@@ -396,6 +406,73 @@ describe("createProduct", () => {
   });
 });
 
+describe("createProductVariantBatch", () => {
+  const productId = "clh1p2s3t0000qwertyuiopas";
+  const optionId = "clh1p2s3t0001qwertyuiopas";
+
+  function batchForm() {
+    const form = new FormData();
+    form.set("productId", productId);
+    form.set("options", JSON.stringify([{ optionId, values: ["Red", "Blue"] }]));
+    form.set("unitPrice", "12.00");
+    form.set("reorderPoint", "5");
+    return form;
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    getWorkspace.mockResolvedValue({
+      organization: { id: "org-1" },
+      membership: { role: MembershipRole.MANAGER, userId: "user-1" },
+      store: { id: "store-1" },
+    });
+    findProduct.mockResolvedValue({ id: productId });
+    findOptions.mockResolvedValue([{ id: optionId }]);
+    findVariants.mockResolvedValue([]);
+    createVariant.mockResolvedValue({ id: "variant-1" });
+    transaction.mockImplementation(async (callback) => callback({
+      $queryRaw: queryRaw,
+      product: { findFirst: findProduct },
+      productOption: { findMany: findOptions },
+      productVariant: { create: createVariant, findMany: findVariants },
+      productVariantOption: { createMany: createVariantOptions },
+      inventoryLevel: { create: inventoryCreate },
+      auditLog: { create: auditCreate },
+    }));
+  });
+
+  it("creates each combination with a generated SKU, inventory, and audit event in one transaction", async () => {
+    const result = await createProductVariantBatch({ status: "idle", message: "" }, batchForm());
+    expect(result.status).toBe("success");
+    expect(transaction).toHaveBeenCalledOnce();
+    expect(createVariant).toHaveBeenCalledTimes(2);
+    const skus = createVariant.mock.calls.map(([args]) => args.data.sku);
+    expect(new Set(skus).size).toBe(2);
+    expect(skus.every((sku) => /^VAR-[A-F0-9]{32}$/.test(sku))).toBe(true);
+    expect(createVariantOptions).toHaveBeenCalledTimes(2);
+    expect(inventoryCreate).toHaveBeenCalledTimes(2);
+    expect(auditCreate).toHaveBeenCalledTimes(2);
+  });
+
+  it("rejects existing combinations and unavailable options before writes", async () => {
+    findVariants.mockResolvedValueOnce([{ optionValues: [{ optionId, value: "RED" }] }]);
+    expect((await createProductVariantBatch({ status: "idle", message: "" }, batchForm())).message).toContain("already exists");
+    expect(createVariant).not.toHaveBeenCalled();
+    findOptions.mockResolvedValueOnce([]);
+    expect((await createProductVariantBatch({ status: "idle", message: "" }, batchForm())).message).toContain("no longer available");
+    expect(createVariant).not.toHaveBeenCalled();
+  });
+
+  it("rejects unauthorized users and oversized batches", async () => {
+    getWorkspace.mockResolvedValueOnce({ organization: { id: "org-1" }, membership: { role: MembershipRole.CASHIER } });
+    expect((await createProductVariantBatch({ status: "idle", message: "" }, batchForm())).message).toContain("cannot");
+    const form = batchForm();
+    form.set("options", JSON.stringify([{ optionId, values: Array.from({ length: 51 }, (_, index) => String(index)) }]));
+    expect((await createProductVariantBatch({ status: "idle", message: "" }, form)).status).toBe("error");
+    expect(transaction).not.toHaveBeenCalled();
+  });
+});
+
 describe("createProductVariant", () => {
   const productId = "clh1p2s3t0000qwertyuiopas";
   const optionId = "clh1p2s3t0001qwertyuiopas";
@@ -439,6 +516,13 @@ describe("createProductVariant", () => {
     formData.set("optionValues", JSON.stringify([{ optionId, value: "Large" }]));
     return formData;
   }
+
+  it("generates a SKU for an individual variant when left blank", async () => {
+    const formData = variantFormData();
+    formData.set("sku", "");
+    expect((await createProductVariant({ status: "idle", message: "" }, formData)).status).toBe("success");
+    expect(createVariant.mock.calls[0][0].data.sku).toMatch(/^VAR-[A-F0-9]{32}$/);
+  });
 
   it("locks and validates the tenant product, then atomically adds options and opening stock", async () => {
     const result = await createProductVariant({ status: "idle", message: "" }, variantFormData());

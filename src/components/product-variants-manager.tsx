@@ -2,7 +2,8 @@
 
 import { useActionState, useEffect, useRef, useState } from "react";
 
-import { createProductVariant, deleteProductVariant, updateProductVariant } from "@/app/products/actions";
+import { createProductVariant, createProductVariantBatch, deleteProductVariant, updateProductVariant } from "@/app/products/actions";
+import { buildVariantCombinations, variantBatchOptionsSchema } from "@/lib/variant-batch";
 
 const initialState = { status: "idle" as const, message: "" };
 
@@ -18,6 +19,52 @@ type Variant = {
 };
 
 type ProductOption = { id: string; name: string };
+
+function ProductVariantBatch({ productId, options }: { productId: string; options: ProductOption[] }) {
+  const [state, action, pending] = useActionState(createProductVariantBatch, initialState);
+  const [values, setValues] = useState<Record<string, string>>({});
+  const selected = options.flatMap(({ id }) => {
+    const raw = values[id]?.trim();
+    return raw ? [{ optionId: id, values: raw.split(",").map((value) => value.trim()) }] : [];
+  });
+  const parsed = variantBatchOptionsSchema.safeParse(selected);
+  const combinations = parsed.success ? buildVariantCombinations(parsed.data) : [];
+  const namesTooLong = combinations.some((combination) => combination.map(({ value }) => value).join(" / ").length > 80);
+
+  useEffect(() => {
+    if (state.status === "success") setValues({});
+  }, [state]);
+
+  if (!options.length) return null;
+  return (
+    <form action={action} className="product-variant-editor">
+      <input type="hidden" name="productId" value={productId} />
+      <input type="hidden" name="options" value={JSON.stringify(selected)} />
+      <strong>Generate variants</strong>
+      <p className="table-secondary">Enter comma-separated values for each option to use. Each combination receives a generated SKU and zero opening stock.</p>
+      <div className="form-grid">
+        {options.map((option) => (
+          <label key={option.id}>{option.name}
+            <input maxLength={1000} value={values[option.id] ?? ""} onChange={(event) => setValues((current) => ({ ...current, [option.id]: event.target.value }))} placeholder="e.g. Small, Medium, Large" />
+          </label>
+        ))}
+        <label>Price · GHS<input name="unitPrice" type="number" min="0.01" max="9999999999.99" step="0.01" required /></label>
+        <label>Unit cost · GHS<input name="costPrice" type="number" min="0" max="9999999999.99" step="0.01" /></label>
+        <label>Reorder point<input name="reorderPoint" type="number" min="0" max="1000000" step="1" defaultValue="5" required /></label>
+      </div>
+      {selected.length > 0 && !parsed.success && <p className="inline-error" role="alert">{parsed.error.issues[0]?.message}</p>}
+      {namesTooLong && <p className="inline-error" role="alert">Each combined variant name must be at most 80 characters.</p>}
+      {parsed.success && (
+        <div>
+          <p>Preview: {combinations.length} variant{combinations.length === 1 ? "" : "s"}</p>
+          <ul>{combinations.map((combination) => <li key={JSON.stringify(combination)}>{combination.map(({ value }) => value).join(" / ")}</li>)}</ul>
+        </div>
+      )}
+      {state.message && <p className={state.status === "error" ? "inline-error" : "inline-success"} role={state.status === "error" ? "alert" : "status"}>{state.message}</p>}
+      <button className="button-quiet" type="submit" disabled={pending || !parsed.success || namesTooLong}>{pending ? "Creating..." : "Create variants"}</button>
+    </form>
+  );
+}
 
 function ProductVariantEditor({
   productId,
@@ -105,13 +152,14 @@ export function ProductVariantsManager({
         {variants.map((variant) => (
           <ProductVariantEditor key={variant.id} productId={productId} variant={variant} canDelete={variants.length > 1} options={options} />
         ))}
+        <ProductVariantBatch productId={productId} options={options} />
         <form action={action} className="product-variant-editor" ref={formRef}>
           <input type="hidden" name="productId" value={productId} />
           <input type="hidden" name="optionValues" value={JSON.stringify(options.map(({ id }) => ({ optionId: id, value: optionValues[id] ?? "" })))} />
           <strong>Add a variant</strong>
           <div className="form-grid">
             <label>Variant name<input name="name" required maxLength={80} placeholder="e.g. Large / Blue" /></label>
-            <label>SKU<input name="sku" required minLength={2} maxLength={64} /></label>
+            <label>SKU<input name="sku" minLength={2} maxLength={64} placeholder="Leave blank to generate" /></label>
             <label>Barcode<input name="barcode" maxLength={64} /></label>
             <label>Price · GHS<input name="unitPrice" type="number" min="0.01" max="9999999999.99" step="0.01" required /></label>
             <label>Unit cost · GHS<input name="costPrice" type="number" min="0" max="9999999999.99" step="0.01" /></label>

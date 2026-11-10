@@ -1,9 +1,11 @@
 generator client {
   provider = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
 }
 
 datasource db {
   provider = "postgresql"
+  extensions = [pg_trgm]
 }
 
 enum MembershipRole {
@@ -186,6 +188,9 @@ model User {
   createdSupplierCreditNotes     SupplierCreditNote[]     @relation("SupplierCreditNoteCreatedBy")
   supplierFollowUps              SupplierFollowUp[]       @relation("SupplierFollowUpCreatedBy")
   platformAdmin                  PlatformAdmin?
+
+  @@index([name(ops: raw("gin_trgm_ops"))], type: Gin, map: "User_name_trgm_idx")
+  @@index([email(ops: raw("gin_trgm_ops"))], type: Gin, map: "User_email_trgm_idx")
 }
 
 model PlatformAdmin {
@@ -377,6 +382,7 @@ model Category {
 
   @@unique([organizationId, name])
   @@index([organizationId])
+  @@index([name(ops: raw("gin_trgm_ops"))], type: Gin, map: "Category_name_trgm_idx")
 }
 
 model Product {
@@ -398,6 +404,7 @@ model Product {
   @@unique([organizationId, id])
   @@index([organizationId, archivedAt])
   @@index([categoryId])
+  @@index([name(ops: raw("gin_trgm_ops"))], type: Gin, map: "Product_name_trgm_idx")
 }
 
 model ProductVariant {
@@ -426,6 +433,9 @@ model ProductVariant {
   @@unique([organizationId, id])
   @@index([sku])
   @@index([barcode])
+  @@index([name(ops: raw("gin_trgm_ops"))], type: Gin, map: "ProductVariant_name_trgm_idx")
+  @@index([sku(ops: raw("gin_trgm_ops"))], type: Gin, map: "ProductVariant_sku_trgm_idx")
+  @@index([barcode(ops: raw("gin_trgm_ops"))], type: Gin, map: "ProductVariant_barcode_trgm_idx")
 }
 
 model ProductOption {
@@ -506,6 +516,7 @@ model InventoryMovement {
 
   @@index([organizationId, createdAt])
   @@index([storeId, variantId, createdAt])
+  @@index([reason(ops: raw("gin_trgm_ops"))], type: Gin, map: "InventoryMovement_reason_trgm_idx")
 }
 
 model StockTransfer {
@@ -549,6 +560,10 @@ model Customer {
   @@index([organizationId, email])
   @@index([organizationId, phone])
   @@index([organizationId, archivedAt])
+  @@index([firstName(ops: raw("gin_trgm_ops"))], type: Gin, map: "Customer_firstName_trgm_idx")
+  @@index([lastName(ops: raw("gin_trgm_ops"))], type: Gin, map: "Customer_lastName_trgm_idx")
+  @@index([email(ops: raw("gin_trgm_ops"))], type: Gin, map: "Customer_email_trgm_idx")
+  @@index([phone(ops: raw("gin_trgm_ops"))], type: Gin, map: "Customer_phone_trgm_idx")
 }
 
 model Supplier {
@@ -572,6 +587,11 @@ model Supplier {
   @@index([organizationId, archivedAt])
   @@index([organizationId, email])
   @@index([organizationId, phone])
+  @@index([businessName(ops: raw("gin_trgm_ops"))], type: Gin, map: "Supplier_businessName_trgm_idx")
+  @@index([contactName(ops: raw("gin_trgm_ops"))], type: Gin, map: "Supplier_contactName_trgm_idx")
+  @@index([email(ops: raw("gin_trgm_ops"))], type: Gin, map: "Supplier_email_trgm_idx")
+  @@index([phone(ops: raw("gin_trgm_ops"))], type: Gin, map: "Supplier_phone_trgm_idx")
+  @@index([address(ops: raw("gin_trgm_ops"))], type: Gin, map: "Supplier_address_trgm_idx")
 }
 
 model PurchaseOrder {
@@ -602,6 +622,7 @@ model PurchaseOrder {
   @@index([storeId, createdAt])
   @@index([supplierId, createdAt])
   @@index([organizationId, storeId, status, nextFollowUpAt])
+  @@index([notes(ops: raw("gin_trgm_ops"))], type: Gin, map: "PurchaseOrder_notes_trgm_idx")
 }
 
 model SupplierFollowUp {
@@ -662,6 +683,8 @@ model PurchaseOrderItem {
   returns          SupplierReturnItem[]
 
   @@index([purchaseOrderId])
+  @@index([productName(ops: raw("gin_trgm_ops"))], type: Gin, map: "PurchaseOrderItem_productName_trgm_idx")
+  @@index([sku(ops: raw("gin_trgm_ops"))], type: Gin, map: "PurchaseOrderItem_sku_trgm_idx")
 }
 
 model SupplierReturn {
@@ -723,6 +746,7 @@ model SupplierInvoice {
   @@index([organizationId, storeId, invoiceDate])
   @@index([supplierId, dueDate])
   @@index([purchaseOrderId, invoiceDate])
+  @@index([invoiceNumber(ops: raw("gin_trgm_ops"))], type: Gin, map: "SupplierInvoice_invoiceNumber_trgm_idx")
 }
 
 model SupplierInvoicePayment {
@@ -921,6 +945,8 @@ model OrderItem {
   returns        SaleReturnItem[]
 
   @@index([orderId])
+  @@index([productName(ops: raw("gin_trgm_ops"))], type: Gin, map: "OrderItem_productName_trgm_idx")
+  @@index([sku(ops: raw("gin_trgm_ops"))], type: Gin, map: "OrderItem_sku_trgm_idx")
 }
 
 model Payment {
@@ -988,6 +1014,7 @@ model GiftCard {
   @@unique([organizationId, codeHash])
   @@unique([organizationId, id])
   @@index([organizationId, active, createdAt])
+  @@index([codeLastFour(ops: raw("gin_trgm_ops"))], type: Gin, map: "GiftCard_codeLastFour_trgm_idx")
 }
 
 model GiftCardTransaction {
@@ -1080,6 +1107,9 @@ model AuditLog {
   @@index([organizationId, createdAt])
   @@index([organizationId, action, createdAt, id])
   @@index([entityType, entityId])
+  @@index([action(ops: raw("gin_trgm_ops"))], type: Gin, map: "AuditLog_action_trgm_idx")
+  @@index([entityType(ops: raw("gin_trgm_ops"))], type: Gin, map: "AuditLog_entityType_trgm_idx")
+  @@index([entityId(ops: raw("gin_trgm_ops"))], type: Gin, map: "AuditLog_entityId_trgm_idx")
 }
 
 model Account {

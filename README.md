@@ -66,6 +66,10 @@ curl -X POST https://your-saleserp-host.example/api/notifications/scheduled \
 
 Set the same secret in the application and external scheduler; do not put it in a URL or commit it. The application does not install or depend on a particular scheduling provider. SMTP delivery remains unverified until deployment settings are supplied.
 
+For a single local Windows installation in a fixed UTC+08:00 timezone, `scripts\install-local-notifications-task.ps1` registers an interactive-user task at 08:15 local time (00:15 UTC). Set a private `NOTIFICATIONS_CRON_SECRET` of at least 32 bytes in `.env` first; Compose passes it and the optional `SMTP_*` settings to the app. Recreate the app after changing its environment. The task runs only while that user is signed in and the app is reachable. It logs to `backups\notifications-scheduler.log` and reports a failure if the endpoint rejects the request or any notification emails fail. An installed task does not imply a successful scheduled run or verified SMTP delivery; check its result and logs. Use an external scheduler in production instead.
+
+`scripts\install-local-monitor-task.ps1` installs a local interactive-user monitor for application health, the age of the latest active-database backup, and the most recent backup and notification task results. It runs three times daily and records results in `backups\operations-monitor.log`; Task Scheduler exposes its last result. This is log-based monitoring, not an automatic alert or a substitute for off-host monitoring.
+
 ### Local PostgreSQL on Windows
 
 After installing PostgreSQL, configure the local `.env` connection. The project creates a dedicated app role and database, then verifies the connection. In PowerShell, run:
@@ -78,14 +82,14 @@ Enter the installer-created `postgres` administrator password when prompted. The
 
 ### Docker deployment
 
-Docker Compose runs the production standalone Next.js image, PostgreSQL 17 with a persistent named volume, and a one-shot migration container before the app starts. The application connects as a non-superuser database role; the separate database administrator credential is only used to initialize PostgreSQL. Docker Engine and the Compose plugin must be installed.
+Docker Compose normally runs the production standalone Next.js image, PostgreSQL 17 with a persistent named volume, and a one-shot migration container before the app starts. The application connects as a non-superuser database role; the separate database administrator credential is only used to initialize PostgreSQL. Docker Engine and the Compose plugin must be installed.
 
 1. Copy `.env.example` to `.env`. Generate separate random values for `AUTH_SECRET`, `POSTGRES_ADMIN_PASSWORD`, and `POSTGRES_APP_PASSWORD`; the database passwords must be hexadecimal so they can safely appear in the internal connection URL. For example, generate each with `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`.
 2. Set `AUTH_URL` to the externally reachable HTTPS origin in production. Keep `.env` private.
 3. Build and start with `docker compose up --build -d`.
 4. Check readiness with `docker compose ps` or `curl.exe http://localhost:3000/api/health`. The health endpoint returns 503 when PostgreSQL is unavailable. To apply migrations without starting the web app, use `docker compose run --rm migrate`.
 
-The database volume survives container replacement; it is not a backup. Create a timestamped, uniquely named custom-format dump and validate its archive with `pg_restore --list`:
+The following Docker backup and restore helpers target **only** the Compose `db` service's `saleserp` database. They refuse to run unless the running app uses that database. If the app uses host PostgreSQL instead, use the active host database procedure below. The database volume survives container replacement; it is not a backup. Create a timestamped, uniquely named custom-format dump and validate its archive with `pg_restore --list`:
 
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\backup-docker-postgres.ps1
@@ -99,6 +103,30 @@ docker compose up -d
 ```
 
 The restore replaces objects contained in the archive in the `saleserp` database; it does not remove objects created after that backup. Test restores periodically in an isolated environment before relying on them.
+
+### Backing up an existing Windows host database
+
+When a local Compose override points the app at `host.docker.internal` and `.env`'s `DATABASE_URL` identifies that same database on `localhost`, use:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\backup-active-postgres.ps1
+```
+
+The helper checks the running app's complete database connection against `.env`, uses the Windows PostgreSQL 17 tools to create a uniquely named custom-format archive in `backups`, and reads the entire archive with `pg_restore` before publishing it. Only after a successful backup does it remove its own `saleserp-active-*.dump` files older than 30 days. It does not remove other backups. Failures are recorded in `backups\active-backup.log` and return a nonzero exit code.
+
+To register a daily 2:00 AM Windows task for the current signed-in user, run `powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\install-active-backup-task.ps1`. It refuses to overwrite an existing task, starts a missed run when available, and retries failures three times at ten-minute intervals. The user must be signed in, and Docker, the app, host PostgreSQL, Node.js, installed project dependencies, and the PostgreSQL 17 tools must be available. Check Task Scheduler's **SalesERP Active Database Backup** task, its last result, and `backups\active-backup.log` regularly; there is no automatic failure notification. A laptop that is shut down, asleep, or signed out cannot run the job.
+
+Archives contain sensitive business data and are not encrypted by the helper. Protect access to `backups`, encrypt and copy backups to a separate secured location, and monitor disk space. Local retention is not off-host protection. The Docker backup/restore helpers must not be used to restore these archives to the active host database.
+
+Periodically verify recovery into a **new, isolated** PostgreSQL database using the same PostgreSQL major version. For example, with PostgreSQL administrator credentials and no existing database named `saleserp_restore_test`:
+
+```powershell
+$pg = Join-Path $env:ProgramFiles "PostgreSQL\17\bin"
+& "$pg\createdb.exe" --host localhost --username postgres saleserp_restore_test
+& "$pg\pg_restore.exe" --host localhost --username postgres --dbname saleserp_restore_test --no-owner --no-acl --exit-on-error .\backups\saleserp-active-EXAMPLE.dump
+```
+
+Check each command's exit status, inspect the restored data and application compatibility without connecting the production app to it, and remove the test database only after verification. `--no-owner --no-acl` makes this a restore drill, not a reconstruction of original ownership and privileges. An actual recovery requires a separate maintenance and cutover plan, including preserving newer data, roles, permissions, and applicable migrations; do not restore over the running database.
 
 ## Current scope
 
@@ -125,6 +153,8 @@ Organization owners can manage employee access from the Team page by inviting ne
 Organization owners can also create, edit, and deactivate stores from Store setup. Store codes are unique within the organization, at least one store must remain active, and a store with an open register shift or employees assigned to no other active store cannot be deactivated. Historical records are retained; tracked products are initialized at zero stock for a new store. When multiple stores are assigned, employees can select their working store from the workspace sidebar; selection is restricted to active stores assigned to their organization membership.
 
 Each store is provisioned with a Main register. Owners can create, rename, and deactivate stations from POS registers; every store must retain an active register, and a station with an open shift cannot be deactivated. Owners have access to every active station, while employees require an explicit station assignment in addition to store access. A station switcher is available in the workspace when multiple stations are assigned.
+
+Product and individual variant creation accept a manual SKU or generate a unique random SKU when left blank. Catalog managers can also preview and create up to 50 combinations of reusable option values for an existing active product. The batch shares one price, optional cost and reorder point; generated variants start with zero stock in the selected store. Existing combinations are rejected and the batch is transactional.
 
 Organization owners can review audit history from the workspace's Audit history page. Events are scoped to the current organization and show the recorded actor, action, entity, organization-local timestamp, and expandable event details. Search accepts action, actor, or entity text; an action filter and pagination are available. The filtered history can be downloaded as a UTF-8 CSV with spreadsheet-formula protection.
 

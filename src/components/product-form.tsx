@@ -19,7 +19,7 @@ export function ProductForm({ categories }: { categories: Array<{ id: string; na
     <form action={action} className="record-form" ref={formRef}>
       <label>Product name<input name="name" required minLength={2} maxLength={120} /></label>
       <div className="form-grid">
-        <label>SKU<input name="sku" required minLength={2} maxLength={64} autoCapitalize="characters" /></label>
+        <label>SKU<input name="sku" minLength={2} maxLength={64} autoCapitalize="characters" placeholder="Leave blank to generate" /></label>
         <label>Barcode <span className="optional-label">Optional</span><input name="barcode" maxLength={64} inputMode="numeric" /></label>
       </div>
       <div className="form-grid">
