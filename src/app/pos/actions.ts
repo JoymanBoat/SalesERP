@@ -1146,7 +1146,7 @@ export async function refundSale(
         FOR UPDATE
       `;
       const priorRequest = await transaction.refund.findUnique({
-        where: { idempotencyKey: parsed.data.idempotencyKey },
+        where: { idempotencyKey: parsed.data.idempotencyKey, organizationId: organization.id },
         select: { id: true },
       });
       if (priorRequest) return;
@@ -1286,7 +1286,7 @@ export async function returnSaleItems(
         FOR UPDATE
       `;
       const priorRequest = await transaction.refund.findUnique({
-        where: { idempotencyKey: parsed.data.idempotencyKey },
+        where: { idempotencyKey: parsed.data.idempotencyKey, organizationId: organization.id },
         select: { id: true },
       });
       if (priorRequest) return;

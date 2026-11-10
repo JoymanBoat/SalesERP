@@ -656,7 +656,7 @@ describe("refundSale", () => {
       message: "Refund recorded. Any gift-card-funded value was restored to the original gift card.",
     });
     expect(refundFindUnique).toHaveBeenCalledWith({
-      where: { idempotencyKey: "e8cc9826-94b6-4d4d-b513-8e44e2734f03" },
+      where: { idempotencyKey: "e8cc9826-94b6-4d4d-b513-8e44e2734f03", organizationId: "org-1" },
       select: { id: true },
     });
     expect(findOrder).toHaveBeenCalledWith({
