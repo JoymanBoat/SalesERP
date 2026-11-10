@@ -46,7 +46,7 @@ test("owner adds a product, opens a shift, sells it for cash and sees stock drop
   await expect(page.getByRole("button", { name: "Complete sale" })).toBeVisible();
 
   await page.getByRole("button", { name: "Complete sale" }).click();
-  await expect(page.locator(".form-success").last()).toBeVisible();
+  await expect(page.getByText(/Sale completed/)).toBeVisible();
 
   await page.goto("/inventory?q=E2E%20Soap");
   await expect(page.getByRole("row", { name: /E2E Soap/ }).first()).toContainText("8");
