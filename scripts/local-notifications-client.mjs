@@ -7,7 +7,8 @@ export async function runScheduledNotifications(base, secret, request = fetch) {
   });
   if (!response.ok) throw new Error(`Notification scheduler returned HTTP ${response.status}.`);
   const result = await response.json();
-  if (!Number.isSafeInteger(result.created) || !Number.isSafeInteger(result.sent) || !Number.isSafeInteger(result.failed)
+  if (!result || typeof result !== "object"
+    || !Number.isSafeInteger(result.created) || !Number.isSafeInteger(result.sent) || !Number.isSafeInteger(result.failed)
     || result.created < 0 || result.sent < 0 || result.failed < 0) {
     throw new Error("Notification scheduler returned an invalid result.");
   }

@@ -17,6 +17,7 @@ describe("local notification scheduler", () => {
   it("surfaces authentication, malformed responses, and delivery failures", async () => {
     await assert.rejects(runScheduledNotifications("http://localhost", "short"), /at least 32 bytes/);
     await assert.rejects(runScheduledNotifications("http://localhost", secret, async () => new Response(null, { status: 401 })), /HTTP 401/);
+    await assert.rejects(runScheduledNotifications("http://localhost", secret, async () => Response.json(null)), /invalid result/);
     await assert.rejects(runScheduledNotifications("http://localhost", secret, async () => Response.json({ created: -1, sent: 0, failed: 0 })), /invalid result/);
     await assert.rejects(runScheduledNotifications("http://localhost", secret, async () => Response.json({ created: 0, sent: 0, failed: 1 })), /delivery failed/);
   });
