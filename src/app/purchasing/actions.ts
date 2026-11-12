@@ -9,7 +9,7 @@ import {
   supplierCreditNoteRequestMatches,
   supplierInvoicePaymentRequestMatches,
 } from "@/lib/supplier-accounting";
-import { getWorkspace } from "@/lib/workspace";
+import { getMutationWorkspace } from "@/lib/workspace";
 import {
   purchaseOrderCancelSchema,
   purchaseOrderInputSchema,
@@ -41,7 +41,7 @@ export async function recordSupplierInvoice(
   _previousState: PurchasingActionState,
   formData: FormData,
 ): Promise<PurchasingActionState> {
-  const { organization, membership, store } = await getWorkspace({ feature: "purchasing", operation: "change" });
+  const { organization, membership, store } = await getMutationWorkspace(formData, { feature: "purchasing", operation: "change" });
   if (!canManageSupplierInvoices(membership.role)) {
     return { status: "error", message: "Your role cannot record supplier invoices." };
   }
@@ -136,7 +136,7 @@ export async function updateSupplierInvoiceDueDate(
     dueDate: formData.get("dueDate") || "",
   });
   if (!parsed.success) return { status: "error", message: parsed.error.issues[0]?.message ?? "Check the invoice due date." };
-  const { organization, membership, store } = await getWorkspace({ feature: "purchasing", operation: "change" });
+  const { organization, membership, store } = await getMutationWorkspace(formData, { feature: "purchasing", operation: "change" });
   if (!canManageSupplierInvoices(membership.role)) {
     return { status: "error", message: "Your role cannot update supplier invoice due dates." };
   }
@@ -225,7 +225,7 @@ export async function recordSupplierInvoicePayment(
   _previousState: PurchasingActionState,
   formData: FormData,
 ): Promise<PurchasingActionState> {
-  const { organization, membership, store } = await getWorkspace({ feature: "purchasing", operation: "change" });
+  const { organization, membership, store } = await getMutationWorkspace(formData, { feature: "purchasing", operation: "change" });
   if (!canManageSupplierInvoices(membership.role)) {
     return { status: "error", message: "Your role cannot record supplier payments." };
   }
@@ -369,7 +369,7 @@ export async function recordSupplierCreditNote(
   _previousState: PurchasingActionState,
   formData: FormData,
 ): Promise<PurchasingActionState> {
-  const { organization, membership, store } = await getWorkspace({ feature: "purchasing", operation: "change" });
+  const { organization, membership, store } = await getMutationWorkspace(formData, { feature: "purchasing", operation: "change" });
   if (!canManageSupplierInvoices(membership.role)) {
     return { status: "error", message: "Your role cannot record supplier credit notes." };
   }
@@ -501,7 +501,7 @@ export async function recordSupplierFollowUp(
     return { status: "error", message: parsed.error.issues[0]?.message ?? "Check the supplier follow-up details." };
   }
 
-  const { organization, membership, store } = await getWorkspace({ feature: "purchasing", operation: "change" });
+  const { organization, membership, store } = await getMutationWorkspace(formData, { feature: "purchasing", operation: "change" });
   if (!canManageSuppliers(membership.role)) {
     return { status: "error", message: "Your role cannot record supplier follow-ups." };
   }
@@ -605,7 +605,7 @@ export async function createPurchaseOrder(
     return { status: "error", message: parsed.error.issues[0]?.message ?? "Check the purchase order details." };
   }
 
-  const { organization, membership, store } = await getWorkspace({ feature: "purchasing", operation: "change" });
+  const { organization, membership, store } = await getMutationWorkspace(formData, { feature: "purchasing", operation: "change" });
   if (!canManageSuppliers(membership.role)) {
     return { status: "error", message: "Your role cannot create purchase orders." };
   }
@@ -705,7 +705,7 @@ export async function receivePurchaseOrder(
     return { status: "error", message: parsed.error.issues[0]?.message ?? "Check the quantities to receive." };
   }
 
-  const { organization, membership, store } = await getWorkspace({ feature: "purchasing", operation: "change" });
+  const { organization, membership, store } = await getMutationWorkspace(formData, { feature: "purchasing", operation: "change" });
   if (!canManageSuppliers(membership.role)) {
     return { status: "error", message: "Your role cannot receive purchase orders." };
   }
@@ -826,7 +826,7 @@ export async function returnSupplierGoods(
     return { status: "error", message: parsed.error.issues[0]?.message ?? "Check the supplier return details." };
   }
 
-  const { organization, membership, store } = await getWorkspace({ feature: "purchasing", operation: "change" });
+  const { organization, membership, store } = await getMutationWorkspace(formData, { feature: "purchasing", operation: "change" });
   if (!canManageSuppliers(membership.role)) {
     return { status: "error", message: "Your role cannot return stock to suppliers." };
   }
@@ -969,7 +969,7 @@ export async function cancelPurchaseOrder(
     return { status: "error", message: parsed.error.issues[0]?.message ?? "Select a valid purchase order." };
   }
 
-  const { organization, membership, store } = await getWorkspace({ feature: "purchasing", operation: "change" });
+  const { organization, membership, store } = await getMutationWorkspace(formData, { feature: "purchasing", operation: "change" });
   if (!canManageSuppliers(membership.role)) {
     return { status: "error", message: "Your role cannot cancel purchase orders." };
   }

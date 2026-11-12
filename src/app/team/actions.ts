@@ -10,7 +10,7 @@ import { employeeInvitationSchema } from "@/lib/invitation-validation";
 import { canManageOrganizationMembers } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 import { assertSubscriptionCapacity, SubscriptionCapacityError, subscriptionCapacityMessage } from "@/lib/subscription-access";
-import { getWorkspace } from "@/lib/workspace";
+import { getMutationWorkspace } from "@/lib/workspace";
 import {
   addOrganizationMemberSchema,
   organizationMemberRegistersSchema,
@@ -52,7 +52,7 @@ export async function addOrganizationMember(
   });
   if (!parsed.success) return { status: "error", message: parsed.error.issues[0]?.message ?? "Check the employee details." };
 
-  const { organization, membership } = await getWorkspace({ operation: "change" });
+  const { organization, membership } = await getMutationWorkspace(formData, { operation: "change" });
   if (!canManageOrganizationMembers(membership.role)) {
     return { status: "error", message: "Only an organization owner can manage employee access." };
   }
@@ -174,7 +174,7 @@ export async function inviteOrganizationMember(
     return { status: "error", message: parsed.error.issues[0]?.message ?? "Check the invitation details." };
   }
 
-  const { organization, membership } = await getWorkspace({ operation: "change" });
+  const { organization, membership } = await getMutationWorkspace(formData, { operation: "change" });
   if (!canManageOrganizationMembers(membership.role)) {
     return { status: "error", message: "Only an organization owner can invite employees." };
   }
@@ -297,7 +297,7 @@ export async function updateOrganizationMemberStores(
     return { status: "error", message: parsed.error.issues[0]?.message ?? "Select at least one active store." };
   }
 
-  const { organization, membership } = await getWorkspace({ operation: "change" });
+  const { organization, membership } = await getMutationWorkspace(formData, { operation: "change" });
   if (!canManageOrganizationMembers(membership.role)) {
     return { status: "error", message: "Only an organization owner can manage employee access." };
   }
@@ -382,7 +382,7 @@ export async function updateOrganizationMemberRegisters(
   });
   if (!parsed.success) return { status: "error", message: parsed.error.issues[0]?.message ?? "Check the POS register assignments." };
 
-  const { organization, membership } = await getWorkspace({ operation: "change" });
+  const { organization, membership } = await getMutationWorkspace(formData, { operation: "change" });
   if (!canManageOrganizationMembers(membership.role)) {
     return { status: "error", message: "Only an organization owner can manage employee access." };
   }
@@ -460,7 +460,7 @@ export async function updateOrganizationMemberRole(
   });
   if (!parsed.success) return { status: "error", message: parsed.error.issues[0]?.message ?? "Select a valid employee role." };
 
-  const { organization, membership } = await getWorkspace({ operation: "change" });
+  const { organization, membership } = await getMutationWorkspace(formData, { operation: "change" });
   if (!canManageOrganizationMembers(membership.role)) {
     return { status: "error", message: "Only an organization owner can manage employee access." };
   }
@@ -512,7 +512,7 @@ export async function removeOrganizationMember(
   });
   if (!parsed.success) return { status: "error", message: parsed.error.issues[0]?.message ?? "Select a valid employee." };
 
-  const { organization, membership } = await getWorkspace({ operation: "change" });
+  const { organization, membership } = await getMutationWorkspace(formData, { operation: "change" });
   if (!canManageOrganizationMembers(membership.role)) {
     return { status: "error", message: "Only an organization owner can manage employee access." };
   }

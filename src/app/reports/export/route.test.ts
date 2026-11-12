@@ -62,4 +62,13 @@ describe("GET /reports/export", () => {
     expect(query.values).toContain("week");
     expect(query.values).toContainEqual(new Date("2026-10-06T12:00:00.000Z"));
   });
+
+  it("binds an export to the organization selected in its originating page", async () => {
+    await GET(new Request("http://localhost/reports/export?days=7&workspaceOrganizationId=org-2"));
+    expect(getWorkspace).toHaveBeenCalledWith({
+      feature: "reports",
+      organizationId: "org-2",
+      operation: "view",
+    });
+  });
 });

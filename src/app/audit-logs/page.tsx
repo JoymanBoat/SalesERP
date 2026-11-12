@@ -78,7 +78,7 @@ export default async function AuditLogsPage({
           <p className="header-note">Review recorded changes for {organization.name}. Times use the organization timezone.</p>
         </div>
         <div className="header-store">{total.toLocaleString("en-GH")} events<span>{query || action ? "Matching organization-wide" : "Organization-wide"}</span></div>
-        <Link className="button-quiet" href={exportHref}>Export CSV</Link>
+        <a className="button-quiet" href={exportHref}>Export CSV</a>
       </header>
 
       <section className="data-panel inventory-table-panel">

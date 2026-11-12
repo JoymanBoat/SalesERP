@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 
 import { canOperateRegister } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
-import { getWorkspace } from "@/lib/workspace";
+import { getMutationWorkspace } from "@/lib/workspace";
 import { registerShiftCloseSchema, registerShiftOpenSchema } from "@/lib/validation";
 
 export type RegisterShiftActionState = {
@@ -25,7 +25,7 @@ export async function openRegisterShift(
     return { status: "error", message: parsed.error.issues[0]?.message ?? "Check the opening float." };
   }
 
-  const { organization, membership, store, register } = await getWorkspace({ feature: "pos", operation: "change" });
+  const { organization, membership, store, register } = await getMutationWorkspace(formData, { feature: "pos", operation: "change" });
   if (!canOperateRegister(membership.role)) {
     return { status: "error", message: "Your role cannot open a register shift." };
   }
@@ -108,7 +108,7 @@ export async function closeRegisterShift(
     return { status: "error", message: parsed.error.issues[0]?.message ?? "Check the closing cash count." };
   }
 
-  const { organization, membership, store, register } = await getWorkspace({ feature: "pos", operation: "change" });
+  const { organization, membership, store, register } = await getMutationWorkspace(formData, { feature: "pos", operation: "change" });
   if (!canOperateRegister(membership.role)) {
     return { status: "error", message: "Your role cannot close a register shift." };
   }

@@ -9,8 +9,13 @@ const batchSize = 500;
 const headers = ["Recorded at (UTC)", "Actor", "Action", "Entity type", "Entity ID", "Details"];
 
 export async function GET(request: Request) {
-  const { organization } = await getWorkspace({ allowedRoles: [MembershipRole.OWNER], operation: "view" });
   const searchParams = new URL(request.url).searchParams;
+  const workspaceOrganizationId = searchParams.get("workspaceOrganizationId");
+  const { organization } = await getWorkspace({
+    allowedRoles: [MembershipRole.OWNER],
+    ...(workspaceOrganizationId !== null ? { organizationId: workspaceOrganizationId } : {}),
+    operation: "view",
+  });
   const query = (searchParams.get("q") ?? "").trim().slice(0, 80);
   const action = (searchParams.get("action") ?? "").slice(0, 120);
   const where = buildAuditLogWhere(organization.id, query, action);

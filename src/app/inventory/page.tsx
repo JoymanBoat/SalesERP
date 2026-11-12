@@ -230,7 +230,7 @@ export default async function InventoryPage({
         <div className="panel-title-row">
           <div><h2>Stock by product</h2><p>Quantity changes are recorded with an audit trail.</p></div>
           <div className="inventory-table-actions">
-            <Link className="report-export-link" href={exportHref}>Export CSV</Link>
+            <a className="report-export-link" href={exportHref}>Export CSV</a>
             <span className="table-count">{rangeStart}–{rangeEnd} of {levelCount.toLocaleString("en-GH")}</span>
           </div>
         </div>

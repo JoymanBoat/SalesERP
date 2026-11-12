@@ -3,7 +3,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 const { findOrder, getWorkspace } = vi.hoisted(() => ({ findOrder: vi.fn(), getWorkspace: vi.fn() }));
 vi.mock("@/lib/prisma", () => ({ prisma: { order: { findFirst: findOrder } } }));
-vi.mock("@/lib/workspace", () => ({ getWorkspace }));
+vi.mock("@/lib/workspace", () => ({
+  getWorkspace,
+  getMutationWorkspace: (_formData: FormData, options: unknown) => getWorkspace(options),
+}));
 import { prepareReceiptShare } from "./actions";
 import { readReceiptToken } from "@/lib/receipt-link";
 

@@ -7,7 +7,7 @@ import { redirect } from "next/navigation";
 
 import { canManageStores } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
-import { getWorkspace } from "@/lib/workspace";
+import { getMutationWorkspace } from "@/lib/workspace";
 import {
   posRegisterInputSchema,
   posRegisterSelectionSchema,
@@ -39,7 +39,7 @@ export async function switchActiveRegister(formData: FormData): Promise<void> {
   const parsed = posRegisterSelectionSchema.safeParse({ registerId: formData.get("registerId") });
   if (!parsed.success) redirect("/pos?registerError=invalid");
 
-  const { organization, membership, store } = await getWorkspace({ feature: "pos", operation: "change" });
+  const { organization, membership, store } = await getMutationWorkspace(formData, { feature: "pos", operation: "change" });
   const register = await prisma.posRegister.findFirst({
     where: {
       id: parsed.data.registerId,
@@ -54,13 +54,16 @@ export async function switchActiveRegister(formData: FormData): Promise<void> {
   });
   if (!register) redirect("/pos?registerError=unavailable");
 
-  (await cookies()).set("saleserp-register-id", register.id, {
+  const cookieStore = await cookies();
+  const cookieOptions = {
     httpOnly: true,
     maxAge: 60 * 60 * 24 * 30,
     path: "/",
-    sameSite: "lax",
+    sameSite: "lax" as const,
     secure: process.env.NODE_ENV === "production",
-  });
+  };
+  cookieStore.set("saleserp-organization-id", organization.id, cookieOptions);
+  cookieStore.set("saleserp-register-id", register.id, cookieOptions);
   redirect("/pos");
 }
 
@@ -73,7 +76,7 @@ export async function createPosRegister(
     code: formData.get("code"),
   });
   if (!parsed.success) return { status: "error", message: parsed.error.issues[0]?.message ?? "Check the POS register details." };
-  const { organization, membership, store } = await getWorkspace({ feature: "pos", operation: "change" });
+  const { organization, membership, store } = await getMutationWorkspace(formData, { feature: "pos", operation: "change" });
   if (!canManageStores(membership.role)) return { status: "error", message: "Only an organization owner can manage POS registers." };
 
   try {
@@ -118,7 +121,7 @@ export async function updatePosRegister(
     code: formData.get("code"),
   });
   if (!parsed.success) return { status: "error", message: parsed.error.issues[0]?.message ?? "Check the POS register details." };
-  const { organization, membership, store } = await getWorkspace({ feature: "pos", operation: "change" });
+  const { organization, membership, store } = await getMutationWorkspace(formData, { feature: "pos", operation: "change" });
   if (!canManageStores(membership.role)) return { status: "error", message: "Only an organization owner can manage POS registers." };
 
   try {
@@ -163,7 +166,7 @@ export async function setPosRegisterActive(
     active: formData.get("active"),
   });
   if (!parsed.success) return { status: "error", message: parsed.error.issues[0]?.message ?? "Check the POS register status." };
-  const { organization, membership, store } = await getWorkspace({ feature: "pos", operation: "change" });
+  const { organization, membership, store } = await getMutationWorkspace(formData, { feature: "pos", operation: "change" });
   if (!canManageStores(membership.role)) return { status: "error", message: "Only an organization owner can manage POS registers." };
 
   try {

@@ -4,12 +4,12 @@ import { revalidatePath } from "next/cache";
 
 import { prisma } from "@/lib/prisma";
 import { getVisibleNotificationTypes } from "@/lib/permissions";
-import { getWorkspace } from "@/lib/workspace";
+import { getMutationWorkspace } from "@/lib/workspace";
 
 export async function markNotificationRead(formData: FormData) {
   const notificationId = String(formData.get("notificationId") ?? "").trim();
   if (!notificationId || notificationId.length > 40) return;
-  const { membership, organization, activeStores } = await getWorkspace({ operation: "change" });
+  const { membership, organization, activeStores } = await getMutationWorkspace(formData, { operation: "change" });
   if (activeStores.length === 0) return;
 
   await prisma.inAppNotification.updateMany({

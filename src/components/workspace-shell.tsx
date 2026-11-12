@@ -3,8 +3,10 @@ import type { ReactNode } from "react";
 import { cookies } from "next/headers";
 
 import { SignOutButton } from "@/components/sign-out-button";
+import { OrganizationSwitcher } from "@/components/organization-switcher";
 import { RegisterSwitcher } from "@/components/register-switcher";
 import { StoreSwitcher } from "@/components/store-switcher";
+import { WorkspaceMutationContext } from "@/components/workspace-mutation-context";
 import { canManagePricing, getVisibleNotificationTypes } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 import { getOrganizationSubscription } from "@/lib/subscription-access";
@@ -35,14 +37,26 @@ export async function WorkspaceShell({
   role: MembershipRole;
   activeSection: WorkspaceSection;
 }) {
-  const stores = await prisma.store.findMany({
-    where: {
-      organizationId,
-      active: true,
-      ...(role === "OWNER" ? {} : { employeeAssignments: { some: { membershipId } } }),
-    },
-    orderBy: [{ name: "asc" }, { id: "asc" }],
-    select: { id: true, name: true, code: true },
+  const [currentMembership, stores] = await Promise.all([
+    prisma.organizationMembership.findUnique({
+      where: { id: membershipId },
+      select: { userId: true },
+    }),
+    prisma.store.findMany({
+      where: {
+        organizationId,
+        active: true,
+        ...(role === "OWNER" ? {} : { employeeAssignments: { some: { membershipId } } }),
+      },
+      orderBy: [{ name: "asc" }, { id: "asc" }],
+      select: { id: true, name: true, code: true },
+    }),
+  ]);
+  if (!currentMembership) throw new Error("The current workspace membership no longer exists.");
+  const organizations = await prisma.organizationMembership.findMany({
+    where: { userId: currentMembership.userId },
+    orderBy: [{ createdAt: "asc" }, { organizationId: "asc" }],
+    select: { organizationId: true, organization: { select: { name: true } } },
   });
   const registers = await prisma.posRegister.findMany({
     where: {
@@ -107,33 +121,39 @@ export async function WorkspaceShell({
   );
 
   return (
-    <main className="workspace">
-      <aside className="workspace-sidebar">
-        <a className="brand-lockup" href="/dashboard">
-          <span className="brand-symbol">K</span>
-          <span>Keta<span className="brand-light">Retail</span></span>
-        </a>
-        <div className="store-switcher">
-          <span className="store-avatar">{organizationName.slice(0, 1).toUpperCase()}</span>
-          <span><strong>{organizationName}</strong><small>{storeName}</small></span>
-        </div>
-        <StoreSwitcher stores={stores} selectedStoreId={storeId} />
-        <RegisterSwitcher registers={registers} selectedRegisterId={selectedRegisterId} />
-        {subscriptionIsReadOnly(subscription, now) && <p className="sidebar-subscription-notice">Subscription expired. Workspace changes are disabled. <a href="/subscription">View subscription</a></p>}
-        <p className="sidebar-label">Workspace</p>
-        <div className="desktop-workspace-nav">{navigation}</div>
-        <details className="mobile-workspace-nav">
-          <summary>Menu · {visibleSections.find((section) => section.id === activeSection)?.label}</summary>
-          {navigation}
-        </details>
-        <div className="sidebar-bottom">
-          <p>Signed in as <strong>{userName}</strong></p>
-          <p>Access role <strong>{role.replaceAll("_", " ")}</strong></p>
-          <p>Local currency <strong>{currency} · Ghana cedi</strong></p>
-          <SignOutButton />
-        </div>
-      </aside>
-      <section className="workspace-main">{children}</section>
-    </main>
+    <WorkspaceMutationContext organizationId={organizationId}>
+      <main className="workspace">
+        <aside className="workspace-sidebar">
+          <a className="brand-lockup" href="/dashboard">
+            <span className="brand-symbol">K</span>
+            <span>Keta<span className="brand-light">Retail</span></span>
+          </a>
+          <div className="store-switcher">
+            <span className="store-avatar">{organizationName.slice(0, 1).toUpperCase()}</span>
+            <span><strong>{organizationName}</strong><small>{storeName}</small></span>
+          </div>
+          <OrganizationSwitcher
+            organizations={organizations.map(({ organizationId: id, organization }) => ({ id, name: organization.name }))}
+            selectedOrganizationId={organizationId}
+          />
+          <StoreSwitcher stores={stores} selectedStoreId={storeId} />
+          <RegisterSwitcher registers={registers} selectedRegisterId={selectedRegisterId} />
+          {subscriptionIsReadOnly(subscription, now) && <p className="sidebar-subscription-notice">Subscription expired. Workspace changes are disabled. <a href="/subscription">View subscription</a></p>}
+          <p className="sidebar-label">Workspace</p>
+          <div className="desktop-workspace-nav">{navigation}</div>
+          <details className="mobile-workspace-nav">
+            <summary>Menu · {visibleSections.find((section) => section.id === activeSection)?.label}</summary>
+            {navigation}
+          </details>
+          <div className="sidebar-bottom">
+            <p>Signed in as <strong>{userName}</strong></p>
+            <p>Access role <strong>{role.replaceAll("_", " ")}</strong></p>
+            <p>Local currency <strong>{currency} · Ghana cedi</strong></p>
+            <SignOutButton />
+          </div>
+        </aside>
+        <section className="workspace-main">{children}</section>
+      </main>
+    </WorkspaceMutationContext>
   );
 }

@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import { prisma } from "@/lib/prisma";
-import { getWorkspace } from "@/lib/workspace";
+import { getMutationWorkspace } from "@/lib/workspace";
 
 export type CategoryActionState = { status: "idle" | "error" | "success"; message: string };
 
@@ -24,7 +24,7 @@ export async function saveCategory(
   });
   if (!parsed.success) return { status: "error", message: parsed.error.issues[0]?.message ?? "Check the category details." };
 
-  const { organization, membership } = await getWorkspace({ feature: "pos", operation: "change" });
+  const { organization, membership } = await getMutationWorkspace(formData, { feature: "pos", operation: "change" });
   if (membership.role !== MembershipRole.OWNER) return { status: "error", message: "Only an organization owner can manage categories." };
 
   try {

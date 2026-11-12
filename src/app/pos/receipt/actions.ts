@@ -7,14 +7,14 @@ import { authBaseUrl } from "@/lib/auth-token";
 import { formatGhanaCedis } from "@/lib/currency";
 import { prisma } from "@/lib/prisma";
 import { createReceiptToken } from "@/lib/receipt-link";
-import { getWorkspace } from "@/lib/workspace";
+import { getMutationWorkspace } from "@/lib/workspace";
 
 export type ShareReceiptState = { status: "idle" | "error" | "success"; message: string; url?: string; text?: string };
 
 export async function prepareReceiptShare(_previous: ShareReceiptState, formData: FormData): Promise<ShareReceiptState> {
   const parsed = z.string().cuid().safeParse(formData.get("orderId"));
   if (!parsed.success) return { status: "error", message: "Invalid receipt. Please refresh and try again." };
-  const { organization, store } = await getWorkspace({ feature: "pos", operation: "change" });
+  const { organization, store } = await getMutationWorkspace(formData, { feature: "pos", operation: "change" });
   const order = await prisma.order.findFirst({
     where: { id: parsed.data, organizationId: organization.id, storeId: store.id, status: { in: [OrderStatus.PAID, OrderStatus.PARTIALLY_REFUNDED, OrderStatus.REFUNDED] } },
     select: { id: true, number: true, total: true, status: true },

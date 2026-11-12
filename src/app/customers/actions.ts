@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 
 import { canManageCustomers } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
-import { getWorkspace } from "@/lib/workspace";
+import { getMutationWorkspace } from "@/lib/workspace";
 import { customerInputSchema, customerStatusSchema, customerUpdateSchema } from "@/lib/validation";
 
 export type CustomerActionState = {
@@ -29,7 +29,7 @@ export async function createCustomer(
     return { status: "error", message: parsed.error.issues[0]?.message ?? "Check the customer details." };
   }
 
-  const { organization, membership } = await getWorkspace({ feature: "customers", operation: "change" });
+  const { organization, membership } = await getMutationWorkspace(formData, { feature: "customers", operation: "change" });
   if (!canManageCustomers(membership.role)) {
     return { status: "error", message: "Your role cannot create customers." };
   }
@@ -86,7 +86,7 @@ export async function updateCustomer(
     return { status: "error", message: parsed.error.issues[0]?.message ?? "Check the customer details." };
   }
 
-  const { organization, membership } = await getWorkspace({ feature: "customers", operation: "change" });
+  const { organization, membership } = await getMutationWorkspace(formData, { feature: "customers", operation: "change" });
   if (!canManageCustomers(membership.role)) {
     return { status: "error", message: "Your role cannot update customers." };
   }
@@ -145,7 +145,7 @@ export async function setCustomerActive(
     return { status: "error", message: "That customer status request is invalid." };
   }
 
-  const { organization, membership } = await getWorkspace({ feature: "customers", operation: "change" });
+  const { organization, membership } = await getMutationWorkspace(formData, { feature: "customers", operation: "change" });
   if (!canManageCustomers(membership.role)) {
     return { status: "error", message: "Your role cannot change customer status." };
   }

@@ -4,8 +4,13 @@ import { buildGiftCardBalanceCsv } from "@/lib/gift-cards";
 import { prisma } from "@/lib/prisma";
 import { getWorkspace } from "@/lib/workspace";
 
-export async function GET() {
-  const { organization, membership } = await getWorkspace({ feature: "giftCards", operation: "view" });
+export async function GET(request: Request) {
+  const workspaceOrganizationId = new URL(request.url).searchParams.get("workspaceOrganizationId");
+  const { organization, membership } = await getWorkspace({
+    feature: "giftCards",
+    ...(workspaceOrganizationId !== null ? { organizationId: workspaceOrganizationId } : {}),
+    operation: "view",
+  });
   if (!canManagePricing(membership.role)) {
     return new Response("Gift card balance exports are available to owners and managers.", {
       status: 403,

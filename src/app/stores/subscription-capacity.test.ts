@@ -2,7 +2,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({ workspace: vi.fn(), transaction: vi.fn(), query: vi.fn(), owner: vi.fn(), subscription: vi.fn(), count: vi.fn(), create: vi.fn(), findStore: vi.fn(), update: vi.fn() }));
 vi.mock("@/lib/prisma", () => ({ prisma: { $transaction: mocks.transaction } }));
-vi.mock("@/lib/workspace", () => ({ getWorkspace: mocks.workspace }));
+vi.mock("@/lib/workspace", () => ({
+  getWorkspace: mocks.workspace,
+  getMutationWorkspace: (_formData: FormData, options: unknown) => mocks.workspace(options),
+}));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("next/headers", () => ({ cookies: vi.fn() }));
 vi.mock("next/navigation", () => ({ redirect: vi.fn() }));

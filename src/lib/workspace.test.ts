@@ -22,7 +22,7 @@ vi.mock("next/navigation", () => ({
   redirect: (path: string) => { throw new Error(`REDIRECT:${path}`); },
 }));
 
-import { getWorkspace } from "./workspace";
+import { getMutationWorkspace, getWorkspace } from "./workspace";
 
 const subscriptionRecord = {
   kind: "PAID",
@@ -39,10 +39,13 @@ describe("workspace subscription access", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.auth.mockResolvedValue({ user: { id: "user-1", name: "Owner" }, revoked: false });
-    mocks.membership.mockResolvedValue({
-      id: "membership-1", organizationId: "org-1", userId: "user-1", role: "OWNER",
-      storeAssignments: [],
-      organization: { id: "org-1", name: "Shop", stores: [{ id: "store-1", active: true }] },
+    mocks.membership.mockImplementation(({ where }) => {
+      if (where.organizationId !== undefined && where.organizationId !== "org-1") return null;
+      return {
+        id: "membership-1", organizationId: "org-1", userId: "user-1", role: "OWNER",
+        storeAssignments: [],
+        organization: { id: "org-1", name: "Shop", stores: [{ id: "store-1", active: true }] },
+      };
     });
     mocks.registers.mockResolvedValue([{ id: "register-1", name: "Main", code: "MAIN" }]);
     mocks.subscription.mockResolvedValue(null);
@@ -75,5 +78,49 @@ describe("workspace subscription access", () => {
       package: { ...subscriptionRecord.package, features: ["unknown"] },
     });
     await expect(getWorkspace({ feature: "pos", operation: "view" })).rejects.toThrow();
+  });
+
+  it("binds mutations to the submitting organization's validated membership", async () => {
+    const formData = new FormData();
+    formData.set("workspaceOrganizationId", "org-2");
+    mocks.cookies.mockResolvedValue({
+      get: (name: string) => name === "saleserp-organization-id" ? { value: "org-1" } : undefined,
+    });
+    mocks.membership.mockImplementation(({ where }) => where.organizationId === "org-2"
+      ? {
+          id: "membership-2", organizationId: "org-2", userId: "user-1", role: "OWNER",
+          storeAssignments: [],
+          organization: { id: "org-2", name: "Second shop", stores: [{ id: "store-2", active: true }] },
+        }
+      : null);
+
+    await expect(getMutationWorkspace(formData, { operation: "change" })).resolves.toMatchObject({
+      organization: { id: "org-2" },
+      membership: { id: "membership-2" },
+    });
+    expect(mocks.membership).toHaveBeenCalledWith(expect.objectContaining({
+      where: { userId: "user-1", organizationId: "org-2" },
+    }));
+  });
+
+  it("rejects missing and revoked organization context instead of falling back to another business", async () => {
+    await expect(getMutationWorkspace(new FormData(), { operation: "change" }))
+      .rejects.toThrow("REDIRECT:/dashboard?workspaceError=stale");
+    const formData = new FormData();
+    formData.set("workspaceOrganizationId", "org-revoked");
+    await expect(getMutationWorkspace(formData, { operation: "change" }))
+      .rejects.toThrow("REDIRECT:/dashboard?workspaceError=unavailable");
+    await expect(getWorkspace({ organizationId: "", operation: "view" }))
+      .rejects.toThrow("REDIRECT:/dashboard?workspaceError=unavailable");
+  });
+
+  it("falls back to an active membership when the selected organization was revoked", async () => {
+    mocks.cookies.mockResolvedValue({ get: (name: string) => name === "saleserp-organization-id" ? { value: "org-revoked" } : undefined });
+    await expect(getWorkspace({ operation: "view" })).resolves.toMatchObject({
+      organization: { id: "org-1" },
+    });
+    expect(mocks.membership).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      where: { userId: "user-1" },
+    }));
   });
 });

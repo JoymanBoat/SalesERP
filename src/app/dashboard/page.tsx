@@ -17,10 +17,10 @@ function getThirtyDayWindowStart() {
 export default async function DashboardPage({
   searchParams,
 }: {
-  searchParams: Promise<{ storeError?: string }>;
+  searchParams: Promise<{ storeError?: string; workspaceError?: string }>;
 }) {
   const { session, membership, organization, store, subscription } = await getWorkspace({ operation: "view" });
-  const { storeError } = await searchParams;
+  const { storeError, workspaceError } = await searchParams;
   const organizationId = organization.id;
   const since = getThirtyDayWindowStart();
   const businessDate = businessDateInTimeZone(new Date(), organization.timezone);
@@ -98,6 +98,13 @@ export default async function DashboardPage({
       storeName={store.name}
       userName={session.user.name ?? session.user.email ?? "User"}
     >
+        {workspaceError && <p className="form-error store-selection-error" role="alert">
+          {workspaceError === "unavailable"
+            ? "You no longer have access to that business. Your current business was restored."
+            : workspaceError === "stale"
+              ? "This page was open before your business changed. Refresh it and try again."
+              : "Select a business you belong to."}
+        </p>}
         {storeError && <p className="form-error store-selection-error" role="alert">
           {storeError === "unavailable"
             ? "That store is no longer active or does not belong to this organization."

@@ -7,7 +7,7 @@ import { redirect } from "next/navigation";
 
 import { canManageCatalog } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
-import { getWorkspace } from "@/lib/workspace";
+import { getMutationWorkspace } from "@/lib/workspace";
 import { CatalogCsvError, parseProductImportCsv } from "@/lib/catalog";
 import { buildVariantCombinations, variantBatchOptionsSchema, variantOptionKey } from "@/lib/variant-batch";
 import {
@@ -84,7 +84,7 @@ export async function createProduct(
     return { status: "error", message: parsed.error.issues[0]?.message ?? "Check the product details." };
   }
 
-  const { organization, membership, store } = await getWorkspace({ feature: "inventory", operation: "change" });
+  const { organization, membership, store } = await getMutationWorkspace(formData, { feature: "inventory", operation: "change" });
   if (!canManageCatalog(membership.role)) {
     return { status: "error", message: "Your role cannot create products." };
   }
@@ -204,7 +204,7 @@ export async function importProducts(
     return { status: "error", message: "The CSV file could not be read." };
   }
 
-  const { organization, membership, store } = await getWorkspace({ feature: "inventory", operation: "change" });
+  const { organization, membership, store } = await getMutationWorkspace(formData, { feature: "inventory", operation: "change" });
   if (!canManageCatalog(membership.role)) {
     return { status: "error", message: "Your role cannot import products." };
   }
@@ -315,7 +315,7 @@ export async function createProductVariantBatch(
   if (combinations.some((values) => values.map(({ value }) => value).join(" / ").length > 80)) {
     return { status: "error", message: "Each combined variant name must be at most 80 characters." };
   }
-  const { organization, membership, store } = await getWorkspace({ feature: "inventory", operation: "change" });
+  const { organization, membership, store } = await getMutationWorkspace(formData, { feature: "inventory", operation: "change" });
   if (!canManageCatalog(membership.role)) {
     return { status: "error", message: "Your role cannot add product variants." };
   }
@@ -403,7 +403,7 @@ export async function createProductVariant(
     return { status: "error", message: parsed.error.issues[0]?.message ?? "Check the variant details." };
   }
 
-  const { organization, membership, store } = await getWorkspace({ feature: "inventory", operation: "change" });
+  const { organization, membership, store } = await getMutationWorkspace(formData, { feature: "inventory", operation: "change" });
   if (!canManageCatalog(membership.role)) {
     return { status: "error", message: "Your role cannot add product variants." };
   }
@@ -522,7 +522,7 @@ export async function updateProductVariant(
   if (!parsed.success) {
     return { status: "error", message: parsed.error.issues[0]?.message ?? "Check the variant details." };
   }
-  const { organization, membership } = await getWorkspace({ feature: "inventory", operation: "change" });
+  const { organization, membership } = await getMutationWorkspace(formData, { feature: "inventory", operation: "change" });
   if (!canManageCatalog(membership.role)) {
     return { status: "error", message: "Your role cannot update product variants." };
   }
@@ -608,7 +608,7 @@ export async function createProductOption(
 ): Promise<ProductActionState> {
   const parsed = productOptionSchema.safeParse({ name: formData.get("name") });
   if (!parsed.success) return { status: "error", message: parsed.error.issues[0]?.message ?? "Enter a valid product option." };
-  const { organization, membership } = await getWorkspace({ feature: "inventory", operation: "change" });
+  const { organization, membership } = await getMutationWorkspace(formData, { feature: "inventory", operation: "change" });
   if (!canManageCatalog(membership.role)) return { status: "error", message: "Your role cannot manage product options." };
 
   const name = parsed.data.name.toLowerCase();
@@ -649,7 +649,7 @@ export async function deleteProductVariant(
   });
   if (!parsed.success) return { status: "error", message: parsed.error.issues[0]?.message ?? "Select a valid variant." };
 
-  const { organization, membership, store } = await getWorkspace({ feature: "inventory", operation: "change" });
+  const { organization, membership, store } = await getMutationWorkspace(formData, { feature: "inventory", operation: "change" });
   if (!canManageCatalog(membership.role)) {
     return { status: "error", message: "Your role cannot delete product variants." };
   }
@@ -772,7 +772,7 @@ export async function updateProduct(
     return { status: "error", message: parsed.error.issues[0]?.message ?? "Check the product details." };
   }
 
-  const { organization, membership } = await getWorkspace({ feature: "inventory", operation: "change" });
+  const { organization, membership } = await getMutationWorkspace(formData, { feature: "inventory", operation: "change" });
   if (!canManageCatalog(membership.role)) {
     return { status: "error", message: "Your role cannot update products." };
   }
@@ -859,7 +859,7 @@ export async function setProductArchived(
     return { status: "error", message: "That product status request is invalid." };
   }
 
-  const { organization, membership } = await getWorkspace({ feature: "inventory", operation: "change" });
+  const { organization, membership } = await getMutationWorkspace(formData, { feature: "inventory", operation: "change" });
   if (!canManageCatalog(membership.role)) {
     return { status: "error", message: "Your role cannot change product status." };
   }

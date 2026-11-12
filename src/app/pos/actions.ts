@@ -8,7 +8,7 @@ import { giftCardRefundCents, giftCardTenderCents, hashGiftCardCode } from "@/li
 import { businessDateInTimeZone, calculatePromotionDiscount, calculateSaleTotals, canReserveInventoryQuantity, centsToDecimal, decimalToCents, eligiblePromotionSubtotal, loyaltyPointsDiscount, loyaltyPointsEarned, proratedLoyaltyPoints, promotionIsWithinDates, promotionMeetsMinimumSubtotal, returnedLineRefundCents } from "@/lib/pos";
 import { cashPaymentProvider } from "@/lib/payment-provider";
 import { prisma } from "@/lib/prisma";
-import { getWorkspace } from "@/lib/workspace";
+import { getMutationWorkspace } from "@/lib/workspace";
 import { resolveTaxRatesAt } from "@/lib/tax";
 import { cashCheckoutSchema, refundSchema, saleDraftSchema, saleReturnSchema, taxSettingsSchema, voidSaleSchema } from "@/lib/validation";
 
@@ -348,7 +348,7 @@ export async function saveSaleDraft(
   });
   if (!parsed.success) return { status: "error", message: parsed.error.issues[0]?.message ?? "Check the sale details." };
 
-  const { organization, membership, store, register } = await getWorkspace({ feature: "pos", operation: "change" });
+  const { organization, membership, store, register } = await getMutationWorkspace(formData, { feature: "pos", operation: "change" });
   if (!canOperateRegister(membership.role)) return { status: "error", message: "Your role cannot use the register." };
   if (!register) return { status: "error", message: "You do not have access to an active POS register at this store." };
   if (Number(parsed.data.discountTotal) > 0 && !canManagePricing(membership.role)) {
@@ -734,7 +734,7 @@ export async function checkoutCash(
   });
   if (!parsed.success) return { status: "error", message: parsed.error.issues[0]?.message ?? "Check the cash received." };
 
-  const { organization, membership, store, register } = await getWorkspace({ feature: "pos", operation: "change" });
+  const { organization, membership, store, register } = await getMutationWorkspace(formData, { feature: "pos", operation: "change" });
   if (!canOperateRegister(membership.role)) return { status: "error", message: "Your role cannot check out sales." };
   if (!register) return { status: "error", message: "You do not have access to an active POS register at this store." };
 
@@ -1132,7 +1132,7 @@ export async function refundSale(
     idempotencyKey: formData.get("idempotencyKey"),
   });
   if (!parsed.success) return { status: "error", message: parsed.error.issues[0]?.message ?? "Check the refund details." };
-  const { organization, membership, store, register } = await getWorkspace({ feature: "pos", operation: "change" });
+  const { organization, membership, store, register } = await getMutationWorkspace(formData, { feature: "pos", operation: "change" });
   if (!canManagePricing(membership.role)) return { status: "error", message: "Only an owner or manager can issue a refund." };
   if (!register) return { status: "error", message: "You do not have access to an active POS register at this store." };
 
@@ -1272,7 +1272,7 @@ export async function returnSaleItems(
     lines: parseJson(formData.get("lines")),
   });
   if (!parsed.success) return { status: "error", message: parsed.error.issues[0]?.message ?? "Check the returned items." };
-  const { organization, membership, store, register } = await getWorkspace({ feature: "pos", operation: "change" });
+  const { organization, membership, store, register } = await getMutationWorkspace(formData, { feature: "pos", operation: "change" });
   if (!canManagePricing(membership.role)) return { status: "error", message: "Only an owner or manager can process sale returns." };
   if (!register) return { status: "error", message: "You do not have access to an active POS register at this store." };
 
@@ -1507,7 +1507,7 @@ export async function updateTaxSettings(
     effectiveFrom: formData.get("effectiveFrom"),
   });
   if (!parsed.success) return { status: "error", message: parsed.error.issues[0]?.message ?? "Enter valid tax settings." };
-  const { organization, membership } = await getWorkspace({ feature: "pos", operation: "change" });
+  const { organization, membership } = await getMutationWorkspace(formData, { feature: "pos", operation: "change" });
   if (!canManagePricing(membership.role)) return { status: "error", message: "Only an owner or manager can change tax settings." };
 
   try {
@@ -1558,7 +1558,7 @@ export async function voidSale(
     reason: formData.get("reason"),
   });
   if (!parsed.success) return { status: "error", message: parsed.error.issues[0]?.message ?? "Check the void details." };
-  const { organization, membership, store, register } = await getWorkspace({ feature: "pos", operation: "change" });
+  const { organization, membership, store, register } = await getMutationWorkspace(formData, { feature: "pos", operation: "change" });
   if (!canManagePricing(membership.role)) return { status: "error", message: "Only an owner or manager can void a held sale." };
   if (!register) return { status: "error", message: "You do not have access to an active POS register at this store." };
 

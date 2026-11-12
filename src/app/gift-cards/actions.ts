@@ -7,7 +7,7 @@ import { canManagePricing } from "@/lib/permissions";
 import { generateGiftCardCode, giftCardExpiryIsValid } from "@/lib/gift-cards";
 import { businessDateInTimeZone } from "@/lib/pos";
 import { prisma } from "@/lib/prisma";
-import { getWorkspace } from "@/lib/workspace";
+import { getMutationWorkspace } from "@/lib/workspace";
 import { giftCardIssueSchema, giftCardStatusSchema } from "@/lib/validation";
 
 export type GiftCardActionState = {
@@ -25,7 +25,7 @@ export async function issueGiftCard(
     expiresOn: formData.get("expiresOn") || "",
   });
   if (!parsed.success) return { status: "error", message: parsed.error.issues[0]?.message ?? "Check the gift card details." };
-  const { organization, membership } = await getWorkspace({ feature: "giftCards", operation: "change" });
+  const { organization, membership } = await getMutationWorkspace(formData, { feature: "giftCards", operation: "change" });
   if (!canManagePricing(membership.role)) return { status: "error", message: "Only an owner or manager can issue gift cards." };
   const businessDate = businessDateInTimeZone(new Date(), organization.timezone);
   if (!giftCardExpiryIsValid(parsed.data.expiresOn || null, businessDate)) {
@@ -90,7 +90,7 @@ export async function setGiftCardActive(
     active: formData.get("active"),
   });
   if (!parsed.success) return { status: "error", message: "That gift card status request is invalid." };
-  const { organization, membership } = await getWorkspace({ feature: "giftCards", operation: "change" });
+  const { organization, membership } = await getMutationWorkspace(formData, { feature: "giftCards", operation: "change" });
   if (!canManagePricing(membership.role)) return { status: "error", message: "Only an owner or manager can change gift card status." };
   const businessDate = businessDateInTimeZone(new Date(), organization.timezone);
   const businessDateStart = new Date(`${businessDate}T00:00:00.000Z`);

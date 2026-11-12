@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 
 import { canManageSuppliers } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
-import { getWorkspace } from "@/lib/workspace";
+import { getMutationWorkspace } from "@/lib/workspace";
 import { supplierInputSchema, supplierStatusSchema, supplierUpdateSchema } from "@/lib/validation";
 
 export type SupplierActionState = {
@@ -33,7 +33,7 @@ export async function createSupplier(
     return { status: "error", message: parsed.error.issues[0]?.message ?? "Check the supplier details." };
   }
 
-  const { organization, membership } = await getWorkspace({ feature: "suppliers", operation: "change" });
+  const { organization, membership } = await getMutationWorkspace(formData, { feature: "suppliers", operation: "change" });
   if (!canManageSuppliers(membership.role)) {
     return { status: "error", message: "Your role cannot create suppliers." };
   }
@@ -90,7 +90,7 @@ export async function updateSupplier(
     return { status: "error", message: parsed.error.issues[0]?.message ?? "Check the supplier details." };
   }
 
-  const { organization, membership } = await getWorkspace({ feature: "suppliers", operation: "change" });
+  const { organization, membership } = await getMutationWorkspace(formData, { feature: "suppliers", operation: "change" });
   if (!canManageSuppliers(membership.role)) {
     return { status: "error", message: "Your role cannot update suppliers." };
   }
@@ -145,7 +145,7 @@ export async function setSupplierActive(
     return { status: "error", message: "That supplier status request is invalid." };
   }
 
-  const { organization, membership } = await getWorkspace({ feature: "suppliers", operation: "change" });
+  const { organization, membership } = await getMutationWorkspace(formData, { feature: "suppliers", operation: "change" });
   if (!canManageSuppliers(membership.role)) {
     return { status: "error", message: "Your role cannot change supplier status." };
   }

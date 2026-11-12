@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 
 import { canManagePricing } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
-import { getWorkspace } from "@/lib/workspace";
+import { getMutationWorkspace } from "@/lib/workspace";
 import { promotionInputSchema, promotionStatusSchema } from "@/lib/validation";
 
 export type PromotionActionState = {
@@ -27,7 +27,7 @@ export async function createPromotion(
   });
   if (!parsed.success) return { status: "error", message: parsed.error.issues[0]?.message ?? "Check the promotion details." };
 
-  const { organization, membership } = await getWorkspace({ feature: "promotions", operation: "change" });
+  const { organization, membership } = await getMutationWorkspace(formData, { feature: "promotions", operation: "change" });
   if (!canManagePricing(membership.role)) {
     return { status: "error", message: "Only an owner or manager can create promotions." };
   }
@@ -116,7 +116,7 @@ export async function setPromotionActive(
   });
   if (!parsed.success) return { status: "error", message: "That promotion status request is invalid." };
 
-  const { organization, membership } = await getWorkspace({ feature: "promotions", operation: "change" });
+  const { organization, membership } = await getMutationWorkspace(formData, { feature: "promotions", operation: "change" });
   if (!canManagePricing(membership.role)) {
     return { status: "error", message: "Only an owner or manager can change promotion status." };
   }

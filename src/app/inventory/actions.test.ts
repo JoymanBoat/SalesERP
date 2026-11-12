@@ -20,7 +20,10 @@ vi.mock("@/lib/prisma", () => ({
   prisma: { $transaction: transaction },
 }));
 
-vi.mock("@/lib/workspace", () => ({ getWorkspace }));
+vi.mock("@/lib/workspace", () => ({
+  getWorkspace,
+  getMutationWorkspace: (_formData: FormData, options: unknown) => getWorkspace(options),
+}));
 vi.mock("next/cache", () => ({ revalidatePath }));
 
 import { MembershipRole } from "@prisma/client";

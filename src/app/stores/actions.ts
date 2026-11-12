@@ -8,7 +8,7 @@ import { redirect } from "next/navigation";
 import { canManageStores } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 import { assertSubscriptionCapacity, SubscriptionCapacityError, subscriptionCapacityMessage } from "@/lib/subscription-access";
-import { getWorkspace } from "@/lib/workspace";
+import { getMutationWorkspace } from "@/lib/workspace";
 import {
   storeCreateSchema,
   storeSelectionSchema,
@@ -41,7 +41,7 @@ export async function switchActiveStore(formData: FormData): Promise<void> {
   const parsed = storeSelectionSchema.safeParse({ storeId: formData.get("storeId") });
   if (!parsed.success) redirect("/dashboard?storeError=invalid");
 
-  const { organization, membership } = await getWorkspace({ operation: "view" });
+  const { organization, membership } = await getMutationWorkspace(formData, { operation: "view" });
   const selectedStore = await prisma.store.findFirst({
     where: {
       id: parsed.data.storeId,
@@ -55,13 +55,16 @@ export async function switchActiveStore(formData: FormData): Promise<void> {
   });
   if (!selectedStore) redirect("/dashboard?storeError=unavailable");
 
-  (await cookies()).set("saleserp-store-id", selectedStore.id, {
+  const cookieStore = await cookies();
+  const cookieOptions = {
     httpOnly: true,
     maxAge: 60 * 60 * 24 * 30,
     path: "/",
-    sameSite: "lax",
+    sameSite: "lax" as const,
     secure: process.env.NODE_ENV === "production",
-  });
+  };
+  cookieStore.set("saleserp-organization-id", organization.id, cookieOptions);
+  cookieStore.set("saleserp-store-id", selectedStore.id, cookieOptions);
   redirect("/dashboard");
 }
 
@@ -78,7 +81,7 @@ export async function createStore(
     return { status: "error", message: parsed.error.issues[0]?.message ?? "Check the store details." };
   }
 
-  const { organization, membership } = await getWorkspace({ operation: "change" });
+  const { organization, membership } = await getMutationWorkspace(formData, { operation: "change" });
   if (!canManageStores(membership.role)) {
     return { status: "error", message: "Only an organization owner can manage stores." };
   }
@@ -160,7 +163,7 @@ export async function updateStore(
     return { status: "error", message: parsed.error.issues[0]?.message ?? "Check the store details." };
   }
 
-  const { organization, membership } = await getWorkspace({ operation: "change" });
+  const { organization, membership } = await getMutationWorkspace(formData, { operation: "change" });
   if (!canManageStores(membership.role)) {
     return { status: "error", message: "Only an organization owner can manage stores." };
   }
@@ -219,7 +222,7 @@ export async function setStoreActive(
     return { status: "error", message: parsed.error.issues[0]?.message ?? "Select a valid store status." };
   }
 
-  const { organization, membership } = await getWorkspace({ operation: "change" });
+  const { organization, membership } = await getMutationWorkspace(formData, { operation: "change" });
   if (!canManageStores(membership.role)) {
     return { status: "error", message: "Only an organization owner can manage stores." };
   }

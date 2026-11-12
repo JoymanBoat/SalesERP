@@ -6,7 +6,12 @@ import { prisma } from "@/lib/prisma";
 import { getWorkspace } from "@/lib/workspace";
 
 export async function GET(request: Request) {
-  const { organization, store, membership } = await getWorkspace({ feature: "reports", operation: "view" });
+  const workspaceOrganizationId = new URL(request.url).searchParams.get("workspaceOrganizationId");
+  const { organization, store, membership } = await getWorkspace({
+    feature: "reports",
+    ...(workspaceOrganizationId !== null ? { organizationId: workspaceOrganizationId } : {}),
+    operation: "view",
+  });
   if (!canManageSupplierInvoices(membership.role)) {
     return new Response("Tax snapshot exports are available to owners, managers, and accountants.", {
       status: 403,

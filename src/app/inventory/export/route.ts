@@ -21,8 +21,13 @@ const headers = [
 ];
 
 export async function GET(request: Request) {
-  const { organization, store } = await getWorkspace({ feature: "inventory", operation: "view" });
   const searchParams = new URL(request.url).searchParams;
+  const workspaceOrganizationId = searchParams.get("workspaceOrganizationId");
+  const { organization, store } = await getWorkspace({
+    feature: "inventory",
+    ...(workspaceOrganizationId !== null ? { organizationId: workspaceOrganizationId } : {}),
+    operation: "view",
+  });
   const query = (searchParams.get("q") ?? "").trim().slice(0, 80);
   const requestedStatus = searchParams.get("status");
   const status = requestedStatus === "low" || requestedStatus === "out" ? requestedStatus : "all";

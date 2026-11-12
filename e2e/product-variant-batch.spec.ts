@@ -18,6 +18,11 @@ test("owner generates SKUs and creates a previewed variant batch", async ({ page
   await expect(page).toHaveURL(/\/dashboard/);
 
   await page.goto("/products");
+  const organizationId = await page.locator("[data-workspace-organization-id]").getAttribute("data-workspace-organization-id");
+  await expect.poll(async () => {
+    const href = await page.getByRole("link", { name: "Export CSV" }).getAttribute("href");
+    return href ? new URL(href, page.url()).searchParams.get("workspaceOrganizationId") : null;
+  }).toBe(organizationId);
   await page.getByLabel("Option name").fill("Size");
   await page.getByRole("button", { name: "Add option" }).click();
   await expect(page.getByText("Size", { exact: true }).first()).toBeVisible();

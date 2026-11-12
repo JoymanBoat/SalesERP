@@ -3,8 +3,13 @@ import { getWorkspace } from "@/lib/workspace";
 import { prisma } from "@/lib/prisma";
 
 export async function GET(request: Request) {
-  const { organization, store } = await getWorkspace({ feature: "reports", operation: "view" });
   const searchParams = new URL(request.url).searchParams;
+  const workspaceOrganizationId = searchParams.get("workspaceOrganizationId");
+  const { organization, store } = await getWorkspace({
+    feature: "reports",
+    ...(workspaceOrganizationId !== null ? { organizationId: workspaceOrganizationId } : {}),
+    operation: "view",
+  });
   const days = parseReportPeriod(searchParams.get("days") ?? undefined);
   const now = new Date();
   const since = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);

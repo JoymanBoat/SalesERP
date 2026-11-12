@@ -45,6 +45,7 @@ Build an independent Ghana-focused retail POS and commerce platform with Ghana c
 - [x] Owner-managed organization employee access for existing accounts, with manager, cashier, inventory-manager, accountant, and customer-support roles; owners only and ownership protected.
 - [x] Owner-managed store creation, editing, and reversible deactivation with unique organization codes, active-store/shift safeguards, audit history, and zero-stock inventory initialization.
 - [x] Switch active store from the workspace; selection is validated against active stores in the current organization.
+- [x] Switch between organization memberships from the workspace; server actions and exports validate the organization bound to the originating page to prevent stale-tab cross-business writes.
 - [x] Assign non-owner employees to one or more active stores; enforce assignments during workspace and store selection, with owners retaining all-store access.
 
 ### Phase 3 — POS engine

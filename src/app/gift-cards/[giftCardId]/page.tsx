@@ -103,9 +103,9 @@ export default async function GiftCardHistoryPage({
             <h2>Transaction history</h2>
             <p>{giftCard.expiresAt ? `Expiry ${giftCard.expiresAt.toISOString().slice(0, 10)}` : "No expiry date"}</p>
           </div>
-          <Link className="report-export-link" href={`/gift-cards/transactions/export?giftCardId=${encodeURIComponent(giftCard.id)}`}>
+          <a className="report-export-link" href={`/gift-cards/transactions/export?giftCardId=${encodeURIComponent(giftCard.id)}`}>
             Download this card's activity CSV
-          </Link>
+          </a>
         </div>
         <div className="table-scroll">
           <table className="data-table operational-table">

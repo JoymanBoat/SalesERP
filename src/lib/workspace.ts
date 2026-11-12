@@ -19,6 +19,7 @@ export async function hasWorkspaceMembership(userId: string) {
 type WorkspaceOptions = {
   allowedRoles?: MembershipRole[];
   feature?: SubscriptionFeature;
+  organizationId?: string;
   operation: "view" | "change";
 };
 
@@ -28,9 +29,14 @@ export async function getWorkspace(options: WorkspaceOptions) {
   if (session.revoked) redirect("/login?revoked=1");
   const cookieStore = await cookies();
   const selectedStoreId = cookieStore.get("saleserp-store-id")?.value;
+  const selectedOrganizationId = options.organizationId ?? cookieStore.get("saleserp-organization-id")?.value;
+  const isExplicitOrganization = options.organizationId !== undefined;
 
-  const membership = await prisma.organizationMembership.findFirst({
-    where: { userId: session.user.id },
+  let membership = await prisma.organizationMembership.findFirst({
+    where: {
+      userId: session.user.id,
+      ...(isExplicitOrganization || selectedOrganizationId ? { organizationId: selectedOrganizationId } : {}),
+    },
     include: {
       storeAssignments: { select: { storeId: true } },
       organization: {
@@ -45,6 +51,21 @@ export async function getWorkspace(options: WorkspaceOptions) {
     orderBy: { createdAt: "asc" },
   });
 
+  if (!membership && isExplicitOrganization) redirect("/dashboard?workspaceError=unavailable");
+  if (!membership && selectedOrganizationId) {
+    membership = await prisma.organizationMembership.findFirst({
+      where: { userId: session.user.id },
+      include: {
+        storeAssignments: { select: { storeId: true } },
+        organization: {
+          include: {
+            stores: { where: { active: true }, orderBy: { createdAt: "asc" } },
+          },
+        },
+      },
+      orderBy: { createdAt: "asc" },
+    });
+  }
   if (!membership) redirect("/register");
   if (options.allowedRoles && !options.allowedRoles.includes(membership.role)) redirect("/dashboard?denied=1");
 
@@ -53,6 +74,7 @@ export async function getWorkspace(options: WorkspaceOptions) {
   if (options.operation === "change" && subscriptionIsReadOnly(subscription, now)) {
     redirect("/subscription?reason=expired");
   }
+
   if (options.feature && !canUseSubscriptionFeature(subscription, options.feature, options.operation, now)) {
     redirect(`/subscription?reason=feature&feature=${options.feature}`);
   }
@@ -87,4 +109,15 @@ export async function getWorkspace(options: WorkspaceOptions) {
     registers,
     register,
   };
+}
+
+export async function getMutationWorkspace(
+  formData: FormData,
+  options: Omit<WorkspaceOptions, "organizationId">,
+) {
+  const organizationId = formData.get("workspaceOrganizationId");
+  if (typeof organizationId !== "string" || organizationId.length === 0 || organizationId.length > 40) {
+    redirect("/dashboard?workspaceError=stale");
+  }
+  return getWorkspace({ ...options, organizationId });
 }

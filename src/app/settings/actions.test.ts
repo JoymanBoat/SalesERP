@@ -5,7 +5,10 @@ const { transaction, getWorkspace, revalidatePath, findOwner, create, updateMany
   transaction: vi.fn(), getWorkspace: vi.fn(), revalidatePath: vi.fn(), findOwner: vi.fn(), create: vi.fn(), updateMany: vi.fn(), audit: vi.fn(),
 }));
 vi.mock("@/lib/prisma", () => ({ prisma: { $transaction: transaction } }));
-vi.mock("@/lib/workspace", () => ({ getWorkspace }));
+vi.mock("@/lib/workspace", () => ({
+  getWorkspace,
+  getMutationWorkspace: (_formData: FormData, options: unknown) => getWorkspace(options),
+}));
 vi.mock("next/cache", () => ({ revalidatePath }));
 
 import { saveCategory } from "./actions";

@@ -12,7 +12,12 @@ import { getWorkspace } from "@/lib/workspace";
 const batchSize = 500;
 
 export async function GET(request: Request) {
-  const { organization, membership } = await getWorkspace({ feature: "giftCards", operation: "view" });
+  const workspaceOrganizationId = new URL(request.url).searchParams.get("workspaceOrganizationId");
+  const { organization, membership } = await getWorkspace({
+    feature: "giftCards",
+    ...(workspaceOrganizationId !== null ? { organizationId: workspaceOrganizationId } : {}),
+    operation: "view",
+  });
   if (!canManagePricing(membership.role)) {
     return new Response("Gift card transaction exports are available to owners and managers.", {
       status: 403,

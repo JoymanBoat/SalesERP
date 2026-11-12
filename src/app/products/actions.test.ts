@@ -25,7 +25,10 @@ vi.mock("@/lib/prisma", () => ({
   },
 }));
 
-vi.mock("@/lib/workspace", () => ({ getWorkspace }));
+vi.mock("@/lib/workspace", () => ({
+  getWorkspace,
+  getMutationWorkspace: (_formData: FormData, options: unknown) => getWorkspace(options),
+}));
 vi.mock("next/cache", () => ({ revalidatePath }));
 
 import { MembershipRole, Prisma } from "@prisma/client";

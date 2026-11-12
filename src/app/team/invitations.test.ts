@@ -22,7 +22,10 @@ vi.mock("@/lib/prisma", () => ({
     employeeInvitation: { deleteMany: deleteInvitations },
   },
 }));
-vi.mock("@/lib/workspace", () => ({ getWorkspace }));
+vi.mock("@/lib/workspace", () => ({
+  getWorkspace,
+  getMutationWorkspace: (_formData: FormData, options: unknown) => getWorkspace(options),
+}));
 vi.mock("@/lib/email", () => ({ sendEmail }));
 vi.mock("@/lib/auth-token", () => ({
   authBaseUrl: () => new URL("https://sales.example/"),

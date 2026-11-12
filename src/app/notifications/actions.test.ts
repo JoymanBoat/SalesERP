@@ -11,7 +11,10 @@ vi.mock("@/lib/prisma", () => ({
   prisma: { inAppNotification: { updateMany } },
 }));
 vi.mock("next/cache", () => ({ revalidatePath }));
-vi.mock("@/lib/workspace", () => ({ getWorkspace }));
+vi.mock("@/lib/workspace", () => ({
+  getWorkspace,
+  getMutationWorkspace: (_formData: FormData, options: unknown) => getWorkspace(options),
+}));
 
 import { markNotificationRead } from "./actions";
 import { getVisibleNotificationTypes } from "@/lib/permissions";

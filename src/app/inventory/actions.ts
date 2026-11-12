@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 
 import { canManageCatalog } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
-import { getWorkspace } from "@/lib/workspace";
+import { getMutationWorkspace } from "@/lib/workspace";
 import { damagedStockSchema, inventoryAdjustmentSchema, inventoryCountSchema, inventoryReorderPointSchema, stockTransferSchema } from "@/lib/validation";
 
 export type InventoryActionState = {
@@ -27,7 +27,7 @@ export async function adjustInventory(
     return { status: "error", message: parsed.error.issues[0]?.message ?? "Check the stock adjustment." };
   }
 
-  const { organization, membership, store } = await getWorkspace({ feature: "inventory", operation: "change" });
+  const { organization, membership, store } = await getMutationWorkspace(formData, { feature: "inventory", operation: "change" });
   if (!canManageCatalog(membership.role)) {
     return { status: "error", message: "Your role cannot adjust stock." };
   }
@@ -129,7 +129,7 @@ export async function updateInventoryReorderPoint(
     return { status: "error", message: parsed.error.issues[0]?.message ?? "Check the reorder point." };
   }
 
-  const { organization, membership, store } = await getWorkspace({ feature: "inventory", operation: "change" });
+  const { organization, membership, store } = await getMutationWorkspace(formData, { feature: "inventory", operation: "change" });
   if (!canManageCatalog(membership.role)) {
     return { status: "error", message: "Your role cannot update reorder points." };
   }
@@ -204,7 +204,7 @@ export async function writeOffDamagedStock(
     return { status: "error", message: parsed.error.issues[0]?.message ?? "Check the damaged-stock details." };
   }
 
-  const { organization, membership, store } = await getWorkspace({ feature: "inventory", operation: "change" });
+  const { organization, membership, store } = await getMutationWorkspace(formData, { feature: "inventory", operation: "change" });
   if (!canManageCatalog(membership.role)) {
     return { status: "error", message: "Your role cannot write off damaged stock." };
   }
@@ -289,7 +289,7 @@ export async function reconcileInventoryCount(
     return { status: "error", message: parsed.error.issues[0]?.message ?? "Check the physical count." };
   }
 
-  const { organization, membership, store } = await getWorkspace({ feature: "inventory", operation: "change" });
+  const { organization, membership, store } = await getMutationWorkspace(formData, { feature: "inventory", operation: "change" });
   if (!canManageCatalog(membership.role)) {
     return { status: "error", message: "Your role cannot reconcile stock counts." };
   }
@@ -389,7 +389,7 @@ export async function transferInventory(
     return { status: "error", message: parsed.error.issues[0]?.message ?? "Check the transfer details." };
   }
 
-  const { organization, membership, store: sourceStore } = await getWorkspace({ feature: "inventory", operation: "change" });
+  const { organization, membership, store: sourceStore } = await getMutationWorkspace(formData, { feature: "inventory", operation: "change" });
   if (!canManageCatalog(membership.role)) {
     return { status: "error", message: "Your role cannot transfer stock." };
   }
