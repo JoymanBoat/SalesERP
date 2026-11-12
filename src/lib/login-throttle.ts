@@ -1,42 +1,42 @@
+import { createHash } from "node:crypto";
+import type { Prisma, PrismaClient } from "@prisma/client";
+
 const MAX_FAILURES = 8;
-const WINDOW_MS = 15 * 60 * 1000;
-const MAX_TRACKED = 10_000;
 
-type Entry = { failures: number; windowStart: number };
+export async function withLoginThrottle<T>(
+  prisma: PrismaClient,
+  email: string,
+  authenticate: (transaction: Prisma.TransactionClient) => Promise<T | null>,
+): Promise<T | null> {
+  const key = createHash("sha256").update(email.trim().toLowerCase()).digest("hex");
+  const result = await prisma.$transaction(async (transaction) => {
+    await transaction.$queryRaw`SELECT 1 FROM pg_advisory_xact_lock(hashtextextended(${key}, 0))`;
+    const active = await transaction.$queryRaw<Array<{ failures: number }>>`
+      SELECT "failures" FROM "LoginThrottle"
+      WHERE "key" = ${key} AND "expiresAt" > CURRENT_TIMESTAMP
+    `;
+    if ((active[0]?.failures ?? 0) >= MAX_FAILURES) return null;
 
-// Per-process limiter: it slows password guessing on one instance; use a shared store if the app runs on several.
-const attempts = new Map<string, Entry>();
-
-function current(key: string, now: number) {
-  const entry = attempts.get(key);
-  if (!entry || now - entry.windowStart > WINDOW_MS) {
-    attempts.delete(key);
-    return undefined;
+    const user = await authenticate(transaction);
+    if (user === null) {
+      await transaction.$executeRaw`
+        INSERT INTO "LoginThrottle" ("key", "failures", "expiresAt")
+        VALUES (${key}, 1, CURRENT_TIMESTAMP + INTERVAL '15 minutes')
+        ON CONFLICT ("key") DO UPDATE SET
+          "failures" = CASE WHEN "LoginThrottle"."expiresAt" <= CURRENT_TIMESTAMP THEN 1 ELSE "LoginThrottle"."failures" + 1 END,
+          "expiresAt" = CASE WHEN "LoginThrottle"."expiresAt" <= CURRENT_TIMESTAMP THEN CURRENT_TIMESTAMP + INTERVAL '15 minutes' ELSE "LoginThrottle"."expiresAt" END
+      `;
+    } else {
+      await transaction.$executeRaw`DELETE FROM "LoginThrottle" WHERE "key" = ${key}`;
+    }
+    return user;
+  }, { maxWait: 10_000, timeout: 30_000 });
+  if (Math.random() < 0.01) {
+    await prisma.$executeRaw`
+      DELETE FROM "LoginThrottle" WHERE "key" IN (
+        SELECT "key" FROM "LoginThrottle" WHERE "expiresAt" <= CURRENT_TIMESTAMP LIMIT 100
+      ) AND "expiresAt" <= CURRENT_TIMESTAMP
+    `;
   }
-  return entry;
-}
-
-export function isLoginBlocked(email: string, now = Date.now()) {
-  return (current(email, now)?.failures ?? 0) >= MAX_FAILURES;
-}
-
-export function recordLoginFailure(email: string, now = Date.now()) {
-  const entry = current(email, now);
-  if (entry) {
-    entry.failures += 1;
-    return;
-  }
-  if (attempts.size >= MAX_TRACKED) {
-    const oldest = attempts.keys().next().value;
-    if (oldest !== undefined) attempts.delete(oldest);
-  }
-  attempts.set(email, { failures: 1, windowStart: now });
-}
-
-export function clearLoginFailures(email: string) {
-  attempts.delete(email);
-}
-
-export function resetLoginThrottleForTests() {
-  attempts.clear();
+  return result;
 }

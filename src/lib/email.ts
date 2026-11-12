@@ -1,4 +1,5 @@
-import { connect as connectTls, type TLSSocket } from "node:tls";
+import { createConnection, type Socket } from "node:net";
+import { connect as connectTls } from "node:tls";
 
 type MailMessage = {
   to: string;
@@ -12,6 +13,7 @@ type SmtpConfiguration = {
   user: string;
   password: string;
   from: string;
+  security: "implicit" | "starttls";
 };
 
 function requiredAddress(value: string, label: string) {
@@ -28,6 +30,7 @@ function getSmtpConfiguration(): SmtpConfiguration {
   const user = process.env.SMTP_USER ?? "";
   const password = process.env.SMTP_PASSWORD ?? "";
   const from = process.env.SMTP_FROM?.trim();
+  const security = process.env.SMTP_SECURITY || "implicit";
 
   if (!host || !/^[A-Za-z0-9.-]+$/.test(host)) {
     throw new Error("SMTP_HOST must be a valid DNS hostname.");
@@ -39,6 +42,9 @@ function getSmtpConfiguration(): SmtpConfiguration {
   if (Boolean(user) !== Boolean(password)) {
     throw new Error("Set both SMTP_USER and SMTP_PASSWORD, or leave both empty.");
   }
+  if (security !== "implicit" && security !== "starttls") {
+    throw new Error("SMTP_SECURITY must be implicit or starttls.");
+  }
 
   return {
     host,
@@ -46,10 +52,12 @@ function getSmtpConfiguration(): SmtpConfiguration {
     user,
     password,
     from: requiredAddress(from, "sender"),
+    security,
   };
 }
 
 class SmtpSession {
+  private readonly socket: Socket;
   private buffer = "";
   private responseLines: string[] = [];
   private readonly responses: string[][] = [];
@@ -59,11 +67,18 @@ class SmtpSession {
   }> = [];
   private failure: Error | null = null;
 
-  constructor(private readonly socket: TLSSocket) {
-    socket.setTimeout(15_000, () => socket.destroy(new Error("SMTP connection timed out.")));
-    socket.on("data", (chunk: Buffer) => this.receive(chunk.toString("utf8")));
-    socket.on("error", (error) => this.fail(error));
-    socket.on("close", () => this.fail(new Error("SMTP connection closed unexpectedly.")));
+  private readonly onData = (chunk: Buffer) => this.receive(chunk.toString("utf8"));
+  private readonly onError = (error: Error) => this.fail(error);
+  private readonly onClose = () => this.fail(new Error("SMTP connection closed unexpectedly."));
+  private readonly onTimeout = () => this.socket.destroy(new Error("SMTP connection timed out."));
+
+  constructor(socket: Socket) {
+    this.socket = socket;
+    socket.setTimeout(15_000);
+    socket.on("timeout", this.onTimeout);
+    socket.on("data", this.onData);
+    socket.on("error", this.onError);
+    socket.on("close", this.onClose);
   }
 
   private receive(chunk: string) {
@@ -118,6 +133,41 @@ class SmtpSession {
   async ready() {
     await this.checkResponse([220]);
   }
+
+  detach() {
+    if (this.failure) throw this.failure;
+    if (this.buffer || this.responseLines.length || this.responses.length || this.waiters.length) {
+      throw new Error("Unexpected SMTP data before TLS upgrade.");
+    }
+    this.socket.off("timeout", this.onTimeout);
+    this.socket.off("data", this.onData);
+    this.socket.off("error", this.onError);
+    this.socket.off("close", this.onClose);
+  }
+}
+
+async function waitForSecureConnection(socket: ReturnType<typeof connectTls>) {
+  const onTimeout = () => socket.destroy(new Error("SMTP connection timed out."));
+  socket.setTimeout(15_000);
+  socket.on("timeout", onTimeout);
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const cleanup = () => {
+        socket.off("secureConnect", onSecure);
+        socket.off("error", onError);
+        socket.off("close", onClose);
+      };
+      const onSecure = () => { cleanup(); resolve(); };
+      const onError = (error: Error) => { cleanup(); reject(error); };
+      const onClose = () => { cleanup(); reject(new Error("SMTP connection closed during TLS negotiation.")); };
+      socket.once("secureConnect", onSecure);
+      socket.once("error", onError);
+      socket.once("close", onClose);
+    });
+  } finally {
+    socket.off("timeout", onTimeout);
+    socket.setTimeout(0);
+  }
 }
 
 function encodeSubject(subject: string) {
@@ -129,22 +179,42 @@ export async function sendEmail(message: MailMessage) {
   const recipient = requiredAddress(message.to, "recipient");
   if (/[\r\n]/.test(message.subject)) throw new Error("Email subject cannot contain line breaks.");
 
-  const socket = connectTls({
-    host: configuration.host,
-    port: configuration.port,
-    servername: configuration.host,
-    rejectUnauthorized: true,
-  });
-  socket.setTimeout(15_000, () => socket.destroy(new Error("SMTP connection timed out.")));
-  try {
-    await new Promise<void>((resolve, reject) => {
-      socket.once("secureConnect", resolve);
-      socket.once("error", reject);
+  let socket: Socket;
+  let smtp: SmtpSession;
+  if (configuration.security === "implicit") {
+    const tlsSocket = connectTls({
+      host: configuration.host,
+      port: configuration.port,
+      servername: configuration.host,
+      rejectUnauthorized: true,
     });
-
-    const smtp = new SmtpSession(socket);
+    socket = tlsSocket;
+    try {
+      await waitForSecureConnection(tlsSocket);
+    } catch (error) {
+      socket.destroy();
+      throw error;
+    }
+    smtp = new SmtpSession(socket);
+  } else {
+    socket = createConnection({ host: configuration.host, port: configuration.port });
+    smtp = new SmtpSession(socket);
+  }
+  try {
     await smtp.ready();
-    await smtp.command(`EHLO ${configuration.host}`, [250]);
+    const capabilities = await smtp.command(`EHLO ${configuration.host}`, [250]);
+    if (configuration.security === "starttls") {
+      if (!capabilities.some((line) => /^250[ -]STARTTLS(?:\s|$)/i.test(line))) {
+        throw new Error("SMTP server does not advertise STARTTLS.");
+      }
+      await smtp.command("STARTTLS", [220]);
+      smtp.detach();
+      const tlsSocket = connectTls({ socket, servername: configuration.host, rejectUnauthorized: true });
+      socket = tlsSocket;
+      await waitForSecureConnection(tlsSocket);
+      smtp = new SmtpSession(tlsSocket);
+      await smtp.command(`EHLO ${configuration.host}`, [250]);
+    }
     if (configuration.user) {
       await smtp.command("AUTH LOGIN", [334]);
       await smtp.command(Buffer.from(configuration.user, "utf8").toString("base64"), [334]);
@@ -168,6 +238,6 @@ export async function sendEmail(message: MailMessage) {
     await smtp.data(mimeMessage);
     await smtp.command("QUIT", [221]);
   } finally {
-    socket.end();
+    socket.destroy();
   }
 }

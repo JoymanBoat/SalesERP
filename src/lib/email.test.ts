@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { sendEmail } from "./email";
 
-const smtpKeys = ["SMTP_HOST", "SMTP_PORT", "SMTP_FROM", "SMTP_USER", "SMTP_PASSWORD"] as const;
+const smtpKeys = ["SMTP_HOST", "SMTP_PORT", "SMTP_FROM", "SMTP_USER", "SMTP_PASSWORD", "SMTP_SECURITY"] as const;
 const originalValues = new Map(smtpKeys.map((key) => [key, process.env[key]]));
 
 afterEach(() => {
@@ -42,5 +42,16 @@ describe("sendEmail", () => {
 
     await expect(sendEmail({ to: "person@example.com", subject: "Reset\r\nBcc: other@example.com", text: "Body" }))
       .rejects.toThrow("Email subject cannot contain line breaks.");
+  });
+
+  it("rejects unsupported SMTP security modes", async () => {
+    process.env.SMTP_HOST = "smtp.example.com";
+    process.env.SMTP_FROM = "support@example.com";
+    process.env.SMTP_PORT = "587";
+    process.env.SMTP_SECURITY = "none";
+    delete process.env.SMTP_USER;
+    delete process.env.SMTP_PASSWORD;
+    await expect(sendEmail({ to: "person@example.com", subject: "Test", text: "Body" }))
+      .rejects.toThrow("SMTP_SECURITY must be implicit or starttls.");
   });
 });

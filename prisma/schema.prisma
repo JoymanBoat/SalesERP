@@ -8,6 +8,14 @@ datasource db {
   extensions = [pg_trgm]
 }
 
+model LoginThrottle {
+  key       String   @id
+  failures  Int
+  expiresAt DateTime @db.Timestamptz(3)
+
+  @@index([expiresAt])
+}
+
 enum MembershipRole {
   OWNER
   MANAGER

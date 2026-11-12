@@ -3,7 +3,7 @@ import bcrypt from "bcryptjs";
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 
-import { isLoginBlocked, recordLoginFailure, clearLoginFailures } from "@/lib/login-throttle";
+import { withLoginThrottle } from "@/lib/login-throttle";
 import { prisma } from "@/lib/prisma";
 import { credentialsSchema } from "@/lib/validation";
 
@@ -21,17 +21,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const parsed = credentialsSchema.safeParse(credentials);
         if (!parsed.success) return null;
 
-        const email = parsed.data.email.toLowerCase();
-        if (isLoginBlocked(email)) return null;
-
-        const user = await prisma.user.findUnique({
-          where: { email: parsed.data.email },
+        const user = await withLoginThrottle(prisma, parsed.data.email, async (transaction) => {
+          const found = await transaction.user.findUnique({ where: { email: parsed.data.email } });
+          if (!found || !(await bcrypt.compare(parsed.data.password, found.passwordHash))) return null;
+          return found;
         });
-        if (!user || !(await bcrypt.compare(parsed.data.password, user.passwordHash))) {
-          recordLoginFailure(email);
-          return null;
-        }
-        clearLoginFailures(email);
+        if (!user) return null;
         return {
           id: user.id,
           name: user.name,
