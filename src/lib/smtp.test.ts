@@ -12,6 +12,7 @@ class FakeTlsSocket extends EventEmitter {
   writes: string[] = [];
   advertiseStarttls = true;
   starttlsResponse = "220 Ready to start TLS\r\n";
+  quitResponse = "221 2.0.0 Bye\r\n";
 
   setTimeout() {
     return this;
@@ -31,7 +32,7 @@ class FakeTlsSocket extends EventEmitter {
         : command === "DATA"
           ? "354 End data with <CR><LF>.<CR><LF>\r\n"
           : command === "QUIT"
-            ? "221 2.0.0 Bye\r\n"
+            ? this.quitResponse
           : isAuthPayload && authPayloadCount === 1
             ? "334 UGFzc3dvcmQ6\r\n"
             : isAuthPayload && this.writes.some((write) => write.trim() === "AUTH LOGIN")
@@ -45,7 +46,9 @@ class FakeTlsSocket extends EventEmitter {
     return true;
   }
 
-  destroy() {}
+  destroy(error?: Error) {
+    if (error) this.emit("error", error);
+  }
 }
 
 describe("SMTP TLS delivery", () => {
@@ -75,6 +78,7 @@ describe("SMTP TLS delivery", () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     for (const key of keys) {
       const originalValue = originalValues.get(key);
       if (originalValue === undefined) delete process.env[key];
@@ -99,6 +103,26 @@ describe("SMTP TLS delivery", () => {
     expect(socket.writes.some((write) => write.includes("Subject: =?UTF-8?B?"))).toBe(true);
     expect(socket.writes.some((write) => write.includes("\r\n..second line\r\n.\r\n"))).toBe(true);
     expect(socket.writes.at(-1)).toBe("QUIT\r\n");
+  });
+
+  it("fails when a TLS connection exceeds the overall delivery deadline", async () => {
+    vi.useFakeTimers();
+    connect.mockReturnValue(socket);
+    const delivery = sendEmail({ to: "person@example.com", subject: "Test", text: "Body" });
+    const assertion = expect(delivery).rejects.toThrow("20-second deadline");
+    await vi.advanceTimersByTimeAsync(20_000);
+    await assertion;
+  });
+
+  it("does not retry an accepted message when QUIT fails", async () => {
+    socket.quitResponse = "421 Closing failed\r\n";
+    const warning = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    try {
+      await expect(sendEmail({ to: "person@example.com", subject: "Test", text: "Body" })).resolves.toBeUndefined();
+      expect(warning).toHaveBeenCalledOnce();
+    } finally {
+      warning.mockRestore();
+    }
   });
 
     it("upgrades with verified TLS before sending credentials and repeats EHLO", async () => {

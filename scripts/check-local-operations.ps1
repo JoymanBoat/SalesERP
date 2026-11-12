@@ -43,6 +43,15 @@ foreach ($taskName in @("SalesERP Active Database Backup", "SalesERP Local Notif
 if ($problems.Count -gt 0) {
   $message = "[$(Get-Date -Format o)] FAILED: $($problems -join ' ')"
   Add-Content -LiteralPath $logPath -Encoding UTF8 -Value $message
+  try {
+    & node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON (Join-Path $PSScriptRoot "operations-alert.mjs") 2>&1 | ForEach-Object {
+      Add-Content -LiteralPath $logPath -Encoding UTF8 -Value "$_"
+    }
+    if ($LASTEXITCODE -ne 0) { throw "Operations alert process exited with code $LASTEXITCODE." }
+  }
+  catch {
+    Add-Content -LiteralPath $logPath -Encoding UTF8 -Value "[$(Get-Date -Format o)] Operations alert email FAILED: $($_.Exception.Message)"
+  }
   Write-Error $message
 }
 $message = "[$(Get-Date -Format o)] Health checks passed; recent backup found. $($notes -join ' ')"

@@ -31,7 +31,8 @@ export async function POST(request: Request) {
   }
 
   try {
-    const result = await runScheduledNotifications();
+    const deliveryOnly = new URL(request.url).searchParams.get("deliveryOnly") === "1";
+    const result = await runScheduledNotifications(new Date(), deliveryOnly);
     return NextResponse.json(result, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     console.error("Scheduled notifications failed.", error);

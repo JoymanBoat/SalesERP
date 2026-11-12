@@ -42,16 +42,27 @@ describe("POST /api/notifications/scheduled", () => {
   });
 
   it("runs the daily job only for a valid bearer token", async () => {
-    runScheduledNotifications.mockResolvedValue({ created: 4, sent: 3, failed: 1 });
+    runScheduledNotifications.mockResolvedValue({ created: 4, sent: 3, failed: 1, hasMore: true });
     const response = await POST(new Request("https://saleserp.example/api/notifications/scheduled", {
       method: "POST",
       headers: { authorization: `Bearer ${"a".repeat(32)}` },
     }));
 
     expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toEqual({ created: 4, sent: 3, failed: 1 });
+    await expect(response.json()).resolves.toEqual({ created: 4, sent: 3, failed: 1, hasMore: true });
     expect(response.headers.get("Cache-Control")).toBe("no-store");
     expect(runScheduledNotifications).toHaveBeenCalledOnce();
+    expect(runScheduledNotifications).toHaveBeenCalledWith(expect.any(Date), false);
+  });
+
+  it("supports delivery-only batches after the first request", async () => {
+    runScheduledNotifications.mockResolvedValue({ created: 0, sent: 1, failed: 0, hasMore: false });
+    const response = await POST(new Request("https://saleserp.example/api/notifications/scheduled?deliveryOnly=1", {
+      method: "POST",
+      headers: { authorization: `Bearer ${"a".repeat(32)}` },
+    }));
+    expect(response.status).toBe(200);
+    expect(runScheduledNotifications).toHaveBeenCalledWith(expect.any(Date), true);
   });
 
   it("does not expose internal job errors", async () => {

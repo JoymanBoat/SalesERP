@@ -125,7 +125,7 @@ describe("runScheduledNotifications", () => {
     const result = await runScheduledNotifications(new Date("2026-11-06T01:00:00.000Z"));
     const inserted = createMany.mock.calls.flatMap(([input]) => input.data);
 
-    expect(result).toEqual({ created: inserted.length, sent: 1, failed: 0 });
+    expect(result).toEqual({ created: inserted.length, sent: 1, failed: 0, hasMore: false });
     expect(sendEmail).toHaveBeenCalledWith(expect.objectContaining({
       to: "owner@example.com",
       subject: "Daily sales summary",
@@ -154,5 +154,14 @@ describe("runScheduledNotifications", () => {
     expect(inserted.filter(({ type }) => type === "SUPPLIER_INVOICE_OVERDUE")
       .every(({ membershipId }) => ["membership-OWNER", "membership-MANAGER", "membership-ACCOUNTANT"].includes(membershipId)))
       .toBe(true);
+  });
+
+  it("limits each delivery batch and skips generation for subsequent batches", async () => {
+    const notification = (await findNotifications())[0];
+    findNotifications.mockResolvedValue([notification, notification, notification]);
+    const result = await runScheduledNotifications(new Date("2026-11-06T01:00:00.000Z"), true);
+    expect(result).toEqual({ created: 0, sent: 3, failed: 0, hasMore: true });
+    expect(findOrganizations).not.toHaveBeenCalled();
+    expect(findNotifications).toHaveBeenCalledWith(expect.objectContaining({ take: 3 }));
   });
 });

@@ -233,7 +233,7 @@ async function deliverPendingEmailNotifications() {
       store: { select: { name: true } },
     },
     orderBy: { createdAt: "asc" },
-    take: 500,
+    take: 3,
   });
   let sent = 0;
   let failed = 0;
@@ -293,10 +293,11 @@ async function deliverPendingEmailNotifications() {
     }
   }
 
-  return { sent, failed };
+  return { sent, failed, hasMore: pending.length === 3 };
 }
 
-export async function runScheduledNotifications(now = new Date()) {
+export async function runScheduledNotifications(now = new Date(), deliveryOnly = false) {
+  if (deliveryOnly) return { created: 0, ...await deliverPendingEmailNotifications() };
   const organizations = await prisma.organization.findMany({
     select: { id: true, name: true, timezone: true, currency: true, stores: { where: { active: true }, select: { id: true, name: true } } },
   });

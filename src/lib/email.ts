@@ -179,28 +179,24 @@ export async function sendEmail(message: MailMessage) {
   const recipient = requiredAddress(message.to, "recipient");
   if (/[\r\n]/.test(message.subject)) throw new Error("Email subject cannot contain line breaks.");
 
-  let socket: Socket;
+  let socket: Socket | undefined;
   let smtp: SmtpSession;
-  if (configuration.security === "implicit") {
-    const tlsSocket = connectTls({
-      host: configuration.host,
-      port: configuration.port,
-      servername: configuration.host,
-      rejectUnauthorized: true,
-    });
-    socket = tlsSocket;
-    try {
-      await waitForSecureConnection(tlsSocket);
-    } catch (error) {
-      socket.destroy();
-      throw error;
-    }
-    smtp = new SmtpSession(socket);
-  } else {
-    socket = createConnection({ host: configuration.host, port: configuration.port });
-    smtp = new SmtpSession(socket);
-  }
+  const deadline = setTimeout(() => socket?.destroy(new Error("SMTP delivery exceeded its 20-second deadline.")), 20_000);
   try {
+    if (configuration.security === "implicit") {
+      const tlsSocket = connectTls({
+        host: configuration.host,
+        port: configuration.port,
+        servername: configuration.host,
+        rejectUnauthorized: true,
+      });
+      socket = tlsSocket;
+      await waitForSecureConnection(tlsSocket);
+      smtp = new SmtpSession(socket);
+    } else {
+      socket = createConnection({ host: configuration.host, port: configuration.port });
+      smtp = new SmtpSession(socket);
+    }
     await smtp.ready();
     const capabilities = await smtp.command(`EHLO ${configuration.host}`, [250]);
     if (configuration.security === "starttls") {
@@ -236,8 +232,13 @@ export async function sendEmail(message: MailMessage) {
       body,
     ].join("\r\n");
     await smtp.data(mimeMessage);
-    await smtp.command("QUIT", [221]);
+    try {
+      await smtp.command("QUIT", [221]);
+    } catch (error) {
+      console.warn("SMTP message was accepted, but closing the session failed.", error);
+    }
   } finally {
-    socket.destroy();
+    clearTimeout(deadline);
+    socket?.destroy();
   }
 }
