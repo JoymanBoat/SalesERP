@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { delimiter, join } from "node:path";
 import { describe, it } from "node:test";
 
-import { isActiveLocalConnection, isExpiredBackup } from "./active-backup-policy.mjs";
+import { backupConfigurationDigest, isActiveLocalConnection, isExpiredBackup, verifyPinnedConfiguration } from "./active-backup-policy.mjs";
 
 describe("active database backup policy", () => {
   it("only accepts the running application's matching local PostgreSQL connection", () => {
@@ -28,5 +31,27 @@ describe("active database backup policy", () => {
     assert.equal(isExpiredBackup(name, false, boundary - 1, now), false);
     assert.equal(isExpiredBackup("saleserp-docker-20261110.dump", true, 0, now), false);
     assert.equal(isExpiredBackup(`${name}.partial`, true, 0, now), false);
+  });
+
+  it("binds the pin to the local environment and every configured compose file", () => {
+    const root = mkdtempSync(join(tmpdir(), "saleserp-backup-policy-"));
+    try {
+      writeFileSync(join(root, ".env"), "DATABASE_URL=example\n");
+      writeFileSync(join(root, "compose.yaml"), "services: {}\n");
+      writeFileSync(join(root, "custom.yaml"), "services: {}\n");
+      const settings = { COMPOSE_FILE: ["compose.yaml", "custom.yaml"].join(delimiter) };
+      const digest = backupConfigurationDigest(root, settings);
+      verifyPinnedConfiguration({ version: 1, digest }, digest);
+      assert.throws(() => verifyPinnedConfiguration(null, digest), /missing or local configuration changed/);
+      writeFileSync(join(root, "custom.yaml"), "services: { app: {} }\n");
+      assert.throws(() => verifyPinnedConfiguration({ version: 1, digest }, backupConfigurationDigest(root, settings)), /configuration changed/);
+      writeFileSync(join(root, "custom.yaml"), "services: {}\n");
+      writeFileSync(join(root, "compose.override.yaml"), "services: {}\n");
+      assert.notEqual(backupConfigurationDigest(root, settings), digest);
+      writeFileSync(join(root, ".env"), "DATABASE_URL=changed\n");
+      assert.notEqual(backupConfigurationDigest(root, settings), digest);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 });
